@@ -107,14 +107,43 @@ export default function ProfitAnalysis() {
     const campaign = campaigns.find(c => c.Campaign === selectedCampaign);
     if (!campaign) return [];
 
+    const currentIS = campaign.ImprShare;
+    const lostToBudget = campaign.LostToBudget;
+    const lostToRank = campaign.LostToRank;
+    
+    // Calculate spend needed to capture IS lost to budget
+    const spendForBudgetIS = campaign.Cost * (1 + lostToBudget / currentIS);
+    
+    // Calculate max possible spend (at 90% IS)
+    const maxSpend = campaign.Cost * (0.9 / currentIS);
+    
     const baseROAS = convValue / cost;
     const baseAOV = convValue / campaign.Conversions;
 
     for (let i = 0; i < numPoints; i++) {
       const currentCost = minCost + i * step;
-      
-      // Power function for diminishing returns (0.4 exponent)
-      const scaleFactor = Math.pow(currentCost / cost, 0.4);
+      let scaleFactor;
+
+      // Different scaling based on where we are in the spend range
+      if (currentCost <= campaign.Cost) {
+        // Below current spend - use 0.4 exponent
+        scaleFactor = Math.pow(currentCost / campaign.Cost, 0.4);
+      } else if (currentCost <= spendForBudgetIS) {
+        // Between current spend and budget-limited spend - linear scaling
+        const baseScale = 1; // Current performance
+        const extraSpend = currentCost - campaign.Cost;
+        const extraScale = (extraSpend / (spendForBudgetIS - campaign.Cost)) * (lostToBudget / currentIS);
+        scaleFactor = baseScale + extraScale;
+      } else {
+        // Above budget-limited spend - use 0.4 exponent for additional spend
+        const budgetLimitedScale = 1 + (lostToBudget / currentIS);
+        const rankLimitedSpend = currentCost - spendForBudgetIS;
+        const maxRankLimitedSpend = maxSpend - spendForBudgetIS;
+        const extraScale = Math.pow(rankLimitedSpend / maxRankLimitedSpend, 0.25) * (lostToRank / currentIS);
+        scaleFactor = budgetLimitedScale + extraScale;
+      }
+
+      // Calculate metrics
       const currentSales = campaign.Conversions * scaleFactor;
       const currentConvValue = currentSales * baseAOV;
       const currentROAS = currentConvValue / currentCost;
@@ -195,18 +224,34 @@ export default function ProfitAnalysis() {
         const maxSpend = campaign.Cost * (0.9 / currentIS);
 
         return (
-          <LineChart data={profitData}>
-            <CartesianGrid strokeDasharray="3 3" />
+          <LineChart 
+            data={profitData}
+            margin={{ top: 20, right: 30, bottom: 5, left: 20 }}
+            className="text-foreground"
+          >
+            <CartesianGrid 
+              strokeDasharray="3 3" 
+              vertical={false}
+              stroke="currentColor" 
+              opacity={0.1} 
+            />
             <XAxis 
               dataKey="cost" 
               tickFormatter={(value) => `$${Math.round(value/1000)}k`}
+              stroke="currentColor"
             />
             <YAxis 
               tickFormatter={(value) => `$${Math.round(value/1000)}k`}
+              stroke="currentColor"
             />
             <Tooltip 
               formatter={(value: number) => [`$${Math.round(value).toLocaleString()}`, 'Profit']}
               labelFormatter={(label: number) => `Cost: $${Math.round(label).toLocaleString()}`}
+              contentStyle={{ 
+                backgroundColor: 'hsl(var(--background))',
+                border: '1px solid hsl(var(--border))',
+                borderRadius: '8px'
+              }}
             />
             
             <ReferenceArea
@@ -216,25 +261,13 @@ export default function ProfitAnalysis() {
               fillOpacity={0.1}
             />
             
-            <ReferenceLine
-              x={optimalZone.start}
-              stroke="#22c55e"
-              strokeDasharray="3 3"
-            />
-            <ReferenceLine
-              x={optimalZone.end}
-              stroke="#22c55e"
-              strokeDasharray="3 3"
-            />
-            
-            <ReferenceLine
-              x={cost}
-              stroke="#000000"
+            <Line 
+              type="monotone" 
+              dataKey="profit" 
+              stroke="#8884d8" 
+              dot={false}
               strokeWidth={2}
-              isFront={true}
             />
-
-            <Line type="monotone" dataKey="profit" stroke="#8884d8" dot={false} />
           </LineChart>
         );
 

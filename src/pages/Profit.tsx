@@ -10,6 +10,12 @@ import Papa from 'papaparse'
 import { ChartThumbnail } from "@/components/chart-thumbnail"
 import { HourCostHeatmap } from "@/components/hour-cost-heatmap";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
+import { ChevronDown, ChevronUp } from "lucide-react" // For the toggle icon
 
 interface CampaignData {
   Campaign: string;
@@ -1014,48 +1020,57 @@ export default function Profit() {
       </Card>
 
       {/* Campaign Filters */}
-      <div className="flex gap-4">
-        <div className="flex-1">
-          <label className="text-sm font-medium mb-2 block">
-            Include Campaigns (contains)
-          </label>
-          <input
-            type="text"
-            value={includeFilter}
-            onChange={(e) => setIncludeFilter(e.target.value)}
-            placeholder="Enter text to filter..."
-            className="w-full px-3 py-2 border rounded-md bg-white text-black dark:bg-gray-950 dark:text-white"
-          />
-        </div>
-        <div className="flex-1">
-          <label className="text-sm font-medium mb-2 block">
-            Exclude Campaigns (contains)
-          </label>
-          <input
-            type="text"
-            value={excludeFilter}
-            onChange={(e) => setExcludeFilter(e.target.value)}
-            placeholder="Enter text to filter..."
-            className="w-full px-3 py-2 border rounded-md bg-background text-foreground"
-          />
-        </div>
-        <div className="w-[200px]">
-          <label className="text-sm font-medium mb-2 block">
-            Rows to Show
-          </label>
-          <Select value={rowLimit.toString()} onValueChange={(value) => setRowLimit(Number(value))}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select rows" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="5">5 rows</SelectItem>
-              <SelectItem value="10">10 rows</SelectItem>
-              <SelectItem value="25">25 rows</SelectItem>
-              <SelectItem value="50">50 rows</SelectItem>
-              <SelectItem value="100">100 rows</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+      <div className="mt-8 mb-6">
+        <Collapsible>
+          <CollapsibleTrigger asChild>
+            <div className="flex items-center space-x-2 text-sm text-muted-foreground hover:text-foreground cursor-pointer">
+              <ChevronDown className="h-4 w-4" />
+              <span>Campaign Filters</span>
+            </div>
+          </CollapsibleTrigger>
+          
+          <CollapsibleContent className="pt-4">
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-3 flex-1">
+                <span className="text-sm font-medium whitespace-nowrap">Include:</span>
+                <input
+                  type="text"
+                  value={includeFilter}
+                  onChange={(e) => setIncludeFilter(e.target.value)}
+                  placeholder="Filter campaigns..."
+                  className="flex-1 h-9 px-3 rounded-md border border-input bg-background text-sm"
+                />
+              </div>
+
+              <div className="flex items-center gap-3 flex-1">
+                <span className="text-sm font-medium whitespace-nowrap">Exclude:</span>
+                <input
+                  type="text"
+                  value={excludeFilter}
+                  onChange={(e) => setExcludeFilter(e.target.value)}
+                  placeholder="Exclude campaigns..."
+                  className="flex-1 h-9 px-3 rounded-md border border-input bg-background text-sm"
+                />
+              </div>
+
+              <Select 
+                value={rowLimit.toString()} 
+                onValueChange={(value) => setRowLimit(Number(value))}
+              >
+                <SelectTrigger className="w-[130px]">
+                  <SelectValue placeholder="Show rows" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="5">5 rows</SelectItem>
+                  <SelectItem value="10">10 rows</SelectItem>
+                  <SelectItem value="25">25 rows</SelectItem>
+                  <SelectItem value="50">50 rows</SelectItem>
+                  <SelectItem value="100">100 rows</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
       </div>
 
       {/* Campaign Performance Summary Table */}
