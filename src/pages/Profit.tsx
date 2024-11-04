@@ -16,6 +16,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { ChevronDown, ChevronUp } from "lucide-react" // For the toggle icon
+import { DateRangeSelector } from "@/components/date-range-selector"
 
 interface CampaignData {
   Campaign: string;
@@ -645,11 +646,6 @@ export default function Profit() {
       const totalAvailableSpend = (campaign.Cost / campaign.ImprShare);
       const maxPossibleSpend = totalAvailableSpend * 0.9;
 
-      // Calculate lost budget dollars first
-      const significantLostBudget = campaign.LostToBudget > 0.05 ? campaign.LostToBudget : 0;
-      const lostBudgetDollars = significantLostBudget > 0 ? 
-        (significantLostBudget / campaign.ImprShare) * campaign.Cost : 0;
-
       let budgetGain = 0;
       let rankGain = 0;
       let changeReason = '';
@@ -657,25 +653,19 @@ export default function Profit() {
       // Use different percentages based on profitability
       const multiplier = summary.profit > 0 ? increasePercentage / 100 : decreasePercentage / 100;
       const direction = summary.profit > 0 ? 1 : -1;
+      
+      // Calculate initial projected cost
       let projectedCost = summary.cost * (1 + (direction * multiplier));
-
-      // If no change requested
-      if ((summary.profit > 0 && increasePercentage === 0) || 
-          (summary.profit <= 0 && decreasePercentage === 0)) {
-        return {
-          name: summary.name,
-          currentCost: summary.cost,
-          currentProfit: summary.profit,
-          projectedCost: summary.cost,
-          projectedProfit: summary.profit,
-          percentChange: 0,
-          profitChange: 0,
-          currentIS: currentIS,
-          projectedIS: currentIS,
-          changeReason: 'No change requested',
-          budgetGain: 0,
-          rankGain: 0
-        };
+      
+      // If we're increasing and would exceed optimal range
+      if (direction > 0 && projectedCost > summary.maxCost) {
+        const actualIncreasePercent = ((summary.maxCost - summary.cost) / summary.cost * 100).toFixed(1);
+        projectedCost = summary.maxCost;
+        changeReason = `Increasing by ${actualIncreasePercent}% to reach optimal range maximum ($${Math.round(summary.maxCost).toLocaleString()})`;
+      } else if (direction < 0) {
+        changeReason = `Reducing spend by ${decreasePercentage}% to improve profitability`;
+      } else if (direction > 0) {
+        changeReason = `Increasing spend by ${increasePercentage}% to test growth potential`;
       }
 
       // Calculate projected metrics
@@ -684,25 +674,6 @@ export default function Profit() {
       const projectedGrossRevenue = projectedRevenue * (1 - cogsPercentage / 100);
       const projectedProfit = projectedGrossRevenue - projectedCost;
       const projectedIS = Math.min(90, (projectedCost / totalAvailableSpend) * 100);
-
-      // Set change reason based on direction and conditions
-      if (direction < 0) {
-        changeReason = `Reducing spend by ${decreasePercentage}% to improve profitability`;
-      } else if (direction > 0 && significantLostBudget > 0) {
-        const spendForBudgetIS = campaign.Cost * (1 + significantLostBudget / campaign.ImprShare);
-        
-        if (projectedCost <= spendForBudgetIS) {
-          const percentageOfBudgetCaptured = (projectedCost - campaign.Cost) / lostBudgetDollars;
-          budgetGain = lostBudgetDollars * percentageOfBudgetCaptured;
-          changeReason = `Increasing spend by ${increasePercentage}% to capture ${(percentageOfBudgetCaptured * 100).toFixed(1)}% of available budget-limited IS`;
-        } else {
-          budgetGain = lostBudgetDollars;
-          rankGain = projectedCost - spendForBudgetIS;
-          changeReason = `Increasing spend by ${increasePercentage}% to capture all budget-limited IS plus some rank-limited IS`;
-        }
-      } else if (direction > 0) {
-        changeReason = `Increasing spend by ${increasePercentage}% to test growth potential`;
-      }
 
       return {
         name: summary.name,
@@ -1146,7 +1117,7 @@ export default function Profit() {
             <div className="flex-1">
               <div className="mb-2 flex justify-between">
                 <span className="text-sm font-medium text-red-500">Decrease Loss-Making Campaigns</span>
-                <span className="text-sm font-medium">-{decreasePercentage}%</span>
+                <span className="text-sm font-medium">-{100 - decreasePercentage}%</span>
               </div>
               <Slider
                 min={0}
@@ -1154,7 +1125,7 @@ export default function Profit() {
                 step={5}
                 value={[decreasePercentage]}
                 onValueChange={(value) => setDecreasePercentage(value[0])}
-                className="flex-grow"
+                className="flex-grow [&_[role=slider]]:rotate-180 [&_[data-orientation=horizontal]>.bg-primary]:bg-muted [&_[data-orientation=horizontal]>div:last-child]:bg-foreground"
               />
             </div>
             <div className="flex-1">
@@ -1186,6 +1157,8 @@ export default function Profit() {
                   <th className="px-4 py-2">Projected IS%</th>
                   <SortableHeader field="percentChange" label="Change" sortState={projectionsSortState} setSortState={setProjectionsSortState} />
                   <SortableHeader field="profitChange" label="Profit Impact" sortState={projectionsSortState} setSortState={setProjectionsSortState} />
+                  <th className="px-4 py-2">Budget IS Gain</th>
+                  <th className="px-4 py-2">Rank IS Gain</th>
                   <th className="px-4 py-2">Change Reason</th>
                 </tr>
               </thead>
