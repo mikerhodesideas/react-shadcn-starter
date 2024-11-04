@@ -133,6 +133,41 @@ const BoxPlot = ({ currentCost, minCost, maxCost }: {
   );
 };
 
+// Add these new types and states at the top of the component
+type SortField = 'cost' | 'revenue' | 'profit' | 'roas' | 'lostBudget' | 'currentCost' | 'currentProfit' | 'projectedCost' | 'projectedProfit' | 'percentChange' | 'profitChange';
+type SortDirection = 'asc' | 'desc';
+
+interface SortState {
+  field: SortField;
+  direction: SortDirection;
+}
+
+// Add sortable header component
+const SortableHeader = ({ 
+  field, 
+  label, 
+  sortState, 
+  setSortState 
+}: { 
+  field: SortField;
+  label: string;
+  sortState: SortState;
+  setSortState: (state: SortState) => void;
+}) => (
+  <th 
+    className="px-4 py-2 cursor-pointer hover:bg-muted/50"
+    onClick={() => setSortState({ 
+      field, 
+      direction: sortState.field === field && sortState.direction === 'desc' ? 'asc' : 'desc' 
+    })}
+  >
+    {label} {sortState.field === field && (sortState.direction === 'desc' ? '↓' : '↑')}
+  </th>
+);
+
+// Add a constant for the localStorage key
+const ROW_LIMIT_KEY = 'campaign_row_limit';
+
 export default function Profit() {
   const [campaigns, setCampaigns] = useState<CampaignData[]>([]);
   const [selectedCampaign, setSelectedCampaign] = useState<string>('');
@@ -171,8 +206,22 @@ export default function Profit() {
   const [includeFilter, setIncludeFilter] = useState('');
   const [excludeFilter, setExcludeFilter] = useState('');
 
-  // Add state for row limit
-  const [rowLimit, setRowLimit] = useState(10);
+  // Update rowLimit state to use localStorage
+  const [rowLimit, setRowLimit] = useState(() => {
+    const saved = localStorage.getItem(ROW_LIMIT_KEY);
+    return saved ? parseInt(saved, 10) : 10;
+  });
+
+  // Add effect to save rowLimit changes
+  useEffect(() => {
+    localStorage.setItem(ROW_LIMIT_KEY, rowLimit.toString());
+  }, [rowLimit]);
+
+  // Add these states
+  const [sortState, setSortState] = useState<SortState>({ field: 'cost', direction: 'desc' });
+
+  // Add a second sort state for the projections table
+  const [projectionsSortState, setProjectionsSortState] = useState<SortState>({ field: 'currentCost', direction: 'desc' });
 
   // Debug loading state
   useEffect(() => {
@@ -264,47 +313,6 @@ export default function Profit() {
       setConvValue(campaign.ConvValue)
     }
   }, [selectedCampaign, campaigns])
-
-  useEffect(() => {
-    const loadHourlyData = async () => {
-      try {
-        const response = await fetch('/src/data/hourly.csv');
-        if (!response.ok) {
-          throw new Error('Failed to fetch hourly CSV file');
-        }
-
-        const csvText = await response.text();
-        
-        const result = Papa.parse(csvText, {
-          header: true,
-          transform: (value: string) => {
-            if (!isNaN(Number(value))) return Number(value);
-            return value;
-          }
-        });
-
-        if (result.errors.length > 0) {
-          throw new Error('Error parsing hourly CSV: ' + result.errors[0].message);
-        }
-
-        // Process hourly data
-        const processedHourlyData = result.data
-          .filter((row: any) => row.Hour !== undefined && row.Campaign && row.Cost)
-          .map((row: any) => ({
-            Hour: Number(row.Hour),
-            Campaign: row.Campaign,
-            Cost: Number(row.Cost)
-          }));
-
-        setHourlyData(processedHourlyData);
-      } catch (err) {
-        console.error('Error loading hourly data:', err);
-        // Don't set error state here to avoid overwriting main data error
-      }
-    };
-
-    loadHourlyData();
-  }, []); // Only load once on component mount
 
   // Calculate current metrics
   const currentMetrics = useMemo((): ProfitMetrics => {
@@ -889,6 +897,22 @@ export default function Profit() {
     }
   };
 
+  // Add sorting function
+  const sortData = (data: any[], field: SortField, direction: SortDirection) => {
+    return [...data].sort((a, b) => {
+      let aValue = field === 'lostBudget' ? 
+        (campaigns.find(c => c.Campaign === a.name)?.LostToBudget ?? 0) : 
+        a[field];
+      let bValue = field === 'lostBudget' ? 
+        (campaigns.find(c => c.Campaign === b.name)?.LostToBudget ?? 0) : 
+        b[field];
+      
+      return direction === 'asc' ? 
+        aValue - bValue : 
+        bValue - aValue;
+    });
+  };
+
   // Add debug output to render
   if (isLoading) {
     return (
@@ -924,435 +948,290 @@ export default function Profit() {
 
   return (
     <>
-      <PageHeader>
-        <PageHeaderHeading>Profit Calculator</PageHeaderHeading>
-      </PageHeader>
-
-      <Tabs defaultValue="summary" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="summary">Campaign Summary</TabsTrigger>
-          <TabsTrigger value="analysis">Profit Analysis</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="summary">
-          {/* Overall Performance Summary */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Overall Performance</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-8 gap-3">
-                <div className="col-span-1">
-                  <p className="text-sm font-medium">Total Cost</p>
-                  <p className="text-xl font-bold">
-                    ${Math.round(campaigns.reduce((sum, c) => sum + c.Cost, 0)).toLocaleString()}
-                  </p>
-                </div>
-                <div className="col-span-1">
-                  <p className="text-sm font-medium">Total Revenue</p>
-                  <p className="text-xl font-bold">
-                    ${Math.round(campaigns.reduce((sum, c) => sum + c.ConvValue, 0)).toLocaleString()}
-                  </p>
-                </div>
-                <div className="col-span-1">
-                  <p className="text-sm font-medium">Total Profit</p>
-                  <p className="text-xl font-bold">
-                    ${Math.round(campaigns.reduce((sum, c) => sum + (c.ConvValue * (1 - cogsPercentage/100) - c.Cost), 0)).toLocaleString()}
-                  </p>
-                </div>
-                <div className="col-span-1">
-                  <p className="text-sm font-medium">Avg CPA</p>
-                  <p className="text-xl font-bold">
-                    ${(campaigns.reduce((sum, c) => sum + c.Cost, 0) / campaigns.reduce((sum, c) => sum + c.Conversions, 0)).toFixed(2)}
-                  </p>
-                </div>
-                <div className="col-span-1">
-                  <p className="text-sm font-medium">Conv Rate</p>
-                  <p className="text-xl font-bold">
-                    {(campaigns.reduce((sum, c) => sum + c.Conversions, 0) / campaigns.reduce((sum, c) => sum + c.Clicks, 0) * 100).toFixed(1)}%
-                  </p>
-                </div>
-                <div className="col-span-1">
-                  <p className="text-sm font-medium">ROAS</p>
-                  <p className="text-xl font-bold">
-                    {(campaigns.reduce((sum, c) => sum + c.ConvValue, 0) / 
-                      campaigns.reduce((sum, c) => sum + c.Cost, 0)).toFixed(1)}x
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Breakeven: {(1 / (1 - cogsPercentage / 100)).toFixed(1)}x
-                  </p>
-                </div>
-                <div className="col-span-2">
-                  <p className="text-sm font-medium mb-1">COGS %</p>
-                  <div className="flex items-center gap-2">
-                    <Slider
-                      min={0}
-                      max={100}
-                      step={1}
-                      value={[cogsPercentage]}
-                      onValueChange={(value) => setCogsPercentage(value[0])}
-                      className="flex-grow"
-                    />
-                    <span className="text-xl font-bold w-16 text-right">{cogsPercentage}%</span>
-                  </div>
-                </div>
+      {/* Overall Performance Summary */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Overall Performance</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-8 gap-3">
+            <div className="col-span-1">
+              <p className="text-sm font-medium">Total Cost</p>
+              <p className="text-xl font-bold">
+                ${Math.round(campaigns.reduce((sum, c) => sum + c.Cost, 0)).toLocaleString()}
+              </p>
+            </div>
+            <div className="col-span-1">
+              <p className="text-sm font-medium">Total Revenue</p>
+              <p className="text-xl font-bold">
+                ${Math.round(campaigns.reduce((sum, c) => sum + c.ConvValue, 0)).toLocaleString()}
+              </p>
+            </div>
+            <div className="col-span-1">
+              <p className="text-sm font-medium">Total Profit</p>
+              <p className="text-xl font-bold">
+                ${Math.round(campaigns.reduce((sum, c) => sum + (c.ConvValue * (1 - cogsPercentage/100) - c.Cost), 0)).toLocaleString()}
+              </p>
+            </div>
+            <div className="col-span-1">
+              <p className="text-sm font-medium">Avg CPA</p>
+              <p className="text-xl font-bold">
+                ${(campaigns.reduce((sum, c) => sum + c.Cost, 0) / campaigns.reduce((sum, c) => sum + c.Conversions, 0)).toFixed(2)}
+              </p>
+            </div>
+            <div className="col-span-1">
+              <p className="text-sm font-medium">Conv Rate</p>
+              <p className="text-xl font-bold">
+                {(campaigns.reduce((sum, c) => sum + c.Conversions, 0) / campaigns.reduce((sum, c) => sum + c.Clicks, 0) * 100).toFixed(1)}%
+              </p>
+            </div>
+            <div className="col-span-1">
+              <p className="text-sm font-medium">ROAS</p>
+              <p className="text-xl font-bold">
+                {(campaigns.reduce((sum, c) => sum + c.ConvValue, 0) / 
+                  campaigns.reduce((sum, c) => sum + c.Cost, 0)).toFixed(1)}x
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Breakeven: {(1 / (1 - cogsPercentage / 100)).toFixed(1)}x
+              </p>
+            </div>
+            <div className="col-span-2">
+              <p className="text-sm font-medium mb-1">COGS %</p>
+              <div className="flex items-center gap-2">
+                <Slider
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={[cogsPercentage]}
+                  onValueChange={(value) => setCogsPercentage(value[0])}
+                  className="flex-grow"
+                />
+                <span className="text-xl font-bold w-16 text-right">{cogsPercentage}%</span>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
-          {/* Campaign Filters - Moved outside cards */}
-          <div className="flex gap-4">
+      {/* Campaign Filters */}
+      <div className="flex gap-4">
+        <div className="flex-1">
+          <label className="text-sm font-medium mb-2 block">
+            Include Campaigns (contains)
+          </label>
+          <input
+            type="text"
+            value={includeFilter}
+            onChange={(e) => setIncludeFilter(e.target.value)}
+            placeholder="Enter text to filter..."
+            className="w-full px-3 py-2 border rounded-md bg-white text-black dark:bg-gray-950 dark:text-white"
+          />
+        </div>
+        <div className="flex-1">
+          <label className="text-sm font-medium mb-2 block">
+            Exclude Campaigns (contains)
+          </label>
+          <input
+            type="text"
+            value={excludeFilter}
+            onChange={(e) => setExcludeFilter(e.target.value)}
+            placeholder="Enter text to filter..."
+            className="w-full px-3 py-2 border rounded-md bg-background text-foreground"
+          />
+        </div>
+        <div className="w-[200px]">
+          <label className="text-sm font-medium mb-2 block">
+            Rows to Show
+          </label>
+          <Select value={rowLimit.toString()} onValueChange={(value) => setRowLimit(Number(value))}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select rows" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="5">5 rows</SelectItem>
+              <SelectItem value="10">10 rows</SelectItem>
+              <SelectItem value="25">25 rows</SelectItem>
+              <SelectItem value="50">50 rows</SelectItem>
+              <SelectItem value="100">100 rows</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* Campaign Performance Summary Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Campaign Performance Summary</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="relative overflow-x-auto">
+            <table className="w-full text-sm text-foreground">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="px-4 py-2">Campaign</th>
+                  <SortableHeader field="cost" label="Cost" sortState={sortState} setSortState={setSortState} />
+                  <SortableHeader field="revenue" label="Revenue" sortState={sortState} setSortState={setSortState} />
+                  <SortableHeader field="profit" label="Profit" sortState={sortState} setSortState={setSortState} />
+                  <SortableHeader field="roas" label="ROAS" sortState={sortState} setSortState={setSortState} />
+                  <SortableHeader field="lostBudget" label="Lost Budget IS%" sortState={sortState} setSortState={setSortState} />
+                  <th className="px-4 py-2">Optimal Range</th>
+                  <th className="px-4 py-2">Recommendation</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortData(filteredCampaignSummaries, sortState.field, sortState.direction)
+                  .slice(0, rowLimit)
+                  .map(summary => {
+                    const campaign = campaigns.find(c => c.Campaign === summary.name);
+                    return (
+                      <tr key={summary.name} className="border-b border-border hover:bg-muted/50">
+                        <td className="px-4 py-2">{summary.name}</td>
+                        <td className="px-4 py-2">${Math.round(summary.cost).toLocaleString()}</td>
+                        <td className="px-4 py-2">${Math.round(summary.revenue).toLocaleString()}</td>
+                        <td className="px-4 py-2">${Math.round(summary.profit).toLocaleString()}</td>
+                        <td className="px-4 py-2">{summary.roas.toFixed(1)}x</td>
+                        <td className="px-4 py-2">
+                          {campaign ? (campaign.LostToBudget > 0.05 ? (campaign.LostToBudget * 100).toFixed(1) : '0.0') : '0.0'}%
+                        </td>
+                        <td className="px-4 py-2">
+                          ${Math.round(summary.minCost).toLocaleString()} - ${Math.round(summary.maxCost).toLocaleString()}
+                        </td>
+                        <td className="px-4 py-2">
+                          <div>
+                            <span className={
+                              summary.recommendation === 'increase' ? 'text-green-500' :
+                              summary.recommendation === 'decrease' ? 'text-red-500' :
+                              'text-yellow-500'
+                            }>
+                              {summary.recommendation === 'increase' ? '↑ Increase' :
+                               summary.recommendation === 'decrease' ? '↓ Decrease' :
+                               '✓ Optimal'}
+                            </span>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {summary.recommendationDetail}
+                            </p>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Budget Change Projections Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Budget Change Projections</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-8 mb-6">
             <div className="flex-1">
-              <label className="text-sm font-medium mb-2 block">
-                Include Campaigns (contains)
-              </label>
-              <input
-                type="text"
-                value={includeFilter}
-                onChange={(e) => setIncludeFilter(e.target.value)}
-                placeholder="Enter text to filter..."
-                className="w-full px-3 py-2 border rounded-md bg-background text-foreground"
+              <div className="mb-2 flex justify-between">
+                <span className="text-sm font-medium text-red-500">Decrease Loss-Making Campaigns</span>
+                <span className="text-sm font-medium">-{decreasePercentage}%</span>
+              </div>
+              <Slider
+                min={0}
+                max={100}
+                step={5}
+                value={[decreasePercentage]}
+                onValueChange={(value) => setDecreasePercentage(value[0])}
+                className="flex-grow"
               />
             </div>
             <div className="flex-1">
-              <label className="text-sm font-medium mb-2 block">
-                Exclude Campaigns (contains)
-              </label>
-              <input
-                type="text"
-                value={excludeFilter}
-                onChange={(e) => setExcludeFilter(e.target.value)}
-                placeholder="Enter text to filter..."
-                className="w-full px-3 py-2 border rounded-md bg-background text-foreground"
+              <div className="mb-2 flex justify-between">
+                <span className="text-sm font-medium text-green-500">Increase Profitable Campaigns</span>
+                <span className="text-sm font-medium">+{increasePercentage}%</span>
+              </div>
+              <Slider
+                min={0}
+                max={100}
+                step={5}
+                value={[increasePercentage]}
+                onValueChange={(value) => setIncreasePercentage(value[0])}
+                className="flex-grow"
               />
             </div>
-            <div className="w-[200px]">
-              <label className="text-sm font-medium mb-2 block">
-                Rows to Show
-              </label>
-              <Select value={rowLimit.toString()} onValueChange={(value) => setRowLimit(Number(value))}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select rows" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="5">5 rows</SelectItem>
-                  <SelectItem value="10">10 rows</SelectItem>
-                  <SelectItem value="25">25 rows</SelectItem>
-                  <SelectItem value="50">50 rows</SelectItem>
-                  <SelectItem value="100">100 rows</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
           </div>
+          <div className="relative overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead>
+                <tr className="border-b">
+                  <th className="px-4 py-2">Campaign</th>
+                  <SortableHeader field="currentCost" label="Current Cost" sortState={projectionsSortState} setSortState={setProjectionsSortState} />
+                  <SortableHeader field="currentProfit" label="Current Profit" sortState={projectionsSortState} setSortState={setProjectionsSortState} />
+                  <th className="px-4 py-2">Current IS%</th>
+                  <th className="px-4 py-2">Lost Budget $</th>
+                  <th className="px-4 py-2">Projected Cost</th>
+                  <th className="px-4 py-2">Projected Profit</th>
+                  <th className="px-4 py-2">Projected IS%</th>
+                  <SortableHeader field="percentChange" label="Change" sortState={projectionsSortState} setSortState={setProjectionsSortState} />
+                  <SortableHeader field="profitChange" label="Profit Impact" sortState={projectionsSortState} setSortState={setProjectionsSortState} />
+                  <th className="px-4 py-2">Change Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {campaignProjections.slice(0, rowLimit).map(projection => {
+                  const campaign = campaigns.find(c => c.Campaign === projection.name)!;
+                  // Only calculate lost budget dollars if over 5% threshold
+                  const significantLostBudget = campaign.LostToBudget > 0.05 ? campaign.LostToBudget : 0;
+                  const lostBudgetDollars = significantLostBudget > 0 ? 
+                    (significantLostBudget / campaign.ImprShare) * campaign.Cost : 0;
 
-          {/* Campaign Performance Summary Table */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Campaign Performance Summary</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="relative overflow-x-auto">
-                <table className="w-full text-sm text-foreground">
-                  <thead>
-                    <tr className="border-b border-border">
-                      <th className="px-4 py-2">Campaign</th>
-                      <th className="px-4 py-2">Cost</th>
-                      <th className="px-4 py-2">Revenue</th>
-                      <th className="px-4 py-2">Profit</th>
-                      <th className="px-4 py-2">ROAS</th>
-                      <th className="px-4 py-2">Lost Budget IS%</th>
-                      <th className="px-4 py-2">Optimal Range</th>
-                      <th className="px-4 py-2">Recommendation</th>
+                  return (
+                    <tr key={projection.name} className="border-b">
+                      <td className="px-4 py-2">{projection.name}</td>
+                      <td className="px-4 py-2">${Math.round(projection.currentCost).toLocaleString()}</td>
+                      <td className="px-4 py-2">
+                        <span className={projection.currentProfit < 0 ? 'text-red-500 font-bold' : ''}>
+                          ${Math.round(projection.currentProfit).toLocaleString()}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2">{projection.currentIS.toFixed(1)}%</td>
+                      <td className="px-4 py-2">${Math.round(lostBudgetDollars).toLocaleString()}</td>
+                      <td className="px-4 py-2">${Math.round(projection.projectedCost).toLocaleString()}</td>
+                      <td className="px-4 py-2">
+                        <span className={projection.projectedProfit < 0 ? 'text-red-500 font-bold' : ''}>
+                          ${Math.round(projection.projectedProfit).toLocaleString()}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2">{projection.projectedIS.toFixed(1)}%</td>
+                      <td className="px-4 py-2">
+                        <span className={projection.percentChange < 0 ? 'text-red-500 font-bold' : ''}>
+                          {projection.percentChange === 0 ? '-' : 
+                           `${projection.percentChange > 0 ? '+' : ''}${projection.percentChange.toFixed(1)}%`}
+                          </span>
+                        </td>
+                      <td className="px-4 py-2">
+                        <span className={projection.profitChange < 0 ? 'text-red-500 font-bold' : 
+                                          projection.profitChange > 0 ? 'text-green-500' : ''}>
+                          {projection.profitChange === 0 ? '-' :
+                           `${projection.profitChange > 0 ? '+' : ''}$${Math.round(Math.abs(projection.profitChange)).toLocaleString()}`}
+                          </span>
+                        </td>
+                      <td className="px-4 py-2">
+                        {projection.budgetGain > 0 && significantLostBudget > 0 ? 
+                          `$${Math.round(projection.budgetGain).toLocaleString()}` : 
+                          '-'}
+                      </td>
+                      <td className="px-4 py-2">
+                        {projection.rankGain > 0 ? 
+                          `$${Math.round(projection.rankGain).toLocaleString()}` : 
+                          '-'}
+                      </td>
+                      <td className="px-4 py-2">{projection.changeReason}</td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {filteredCampaignSummaries.slice(0, rowLimit).map(summary => {
-                      const campaign = campaigns.find(c => c.Campaign === summary.name);
-                      return (
-                        <tr key={summary.name} className="border-b border-border hover:bg-muted/50">
-                          <td className="px-4 py-2">{summary.name}</td>
-                          <td className="px-4 py-2">${Math.round(summary.cost).toLocaleString()}</td>
-                          <td className="px-4 py-2">${Math.round(summary.revenue).toLocaleString()}</td>
-                          <td className="px-4 py-2">${Math.round(summary.profit).toLocaleString()}</td>
-                          <td className="px-4 py-2">{summary.roas.toFixed(1)}x</td>
-                          <td className="px-4 py-2">
-                            {(campaign?.LostToBudget > 0.05 ? campaign?.LostToBudget * 100 : 0).toFixed(1)}%
-                          </td>
-                          <td className="px-4 py-2">
-                            ${Math.round(summary.minCost).toLocaleString()} - ${Math.round(summary.maxCost).toLocaleString()}
-                          </td>
-                          <td className="px-4 py-2">
-                            <div>
-                              <span className={
-                                summary.recommendation === 'increase' ? 'text-green-500' :
-                                summary.recommendation === 'decrease' ? 'text-red-500' :
-                                'text-yellow-500'
-                              }>
-                                {summary.recommendation === 'increase' ? '↑ Increase' :
-                                 summary.recommendation === 'decrease' ? '↓ Decrease' :
-                                 '✓ Optimal'}
-                              </span>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {summary.recommendationDetail}
-                              </p>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 5% Budget Change Projections Table */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Budget Change Projections</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex gap-8 mb-6">
-                <div className="flex-1">
-                  <div className="mb-2 flex justify-between">
-                    <span className="text-sm font-medium text-red-500">Decrease Loss-Making Campaigns</span>
-                    <span className="text-sm font-medium">-{decreasePercentage}%</span>
-                  </div>
-                  <Slider
-                    min={0}
-                    max={100}
-                    step={5}
-                    value={[decreasePercentage]}
-                    onValueChange={(value) => setDecreasePercentage(value[0])}
-                    className="flex-grow"
-                  />
-                </div>
-                <div className="flex-1">
-                  <div className="mb-2 flex justify-between">
-                    <span className="text-sm font-medium text-green-500">Increase Profitable Campaigns</span>
-                    <span className="text-sm font-medium">+{increasePercentage}%</span>
-                  </div>
-                  <Slider
-                    min={0}
-                    max={100}
-                    step={5}
-                    value={[increasePercentage]}
-                    onValueChange={(value) => setIncreasePercentage(value[0])}
-                    className="flex-grow"
-                  />
-                </div>
-              </div>
-              <div className="relative overflow-x-auto">
-                <table className="w-full text-sm text-left">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="px-4 py-2">Campaign</th>
-                      <th className="px-4 py-2">Current Cost</th>
-                      <th className="px-4 py-2">Current Profit</th>
-                      <th className="px-4 py-2">Current IS%</th>
-                      <th className="px-4 py-2">Lost Budget $</th>
-                      <th className="px-4 py-2">Projected Cost</th>
-                      <th className="px-4 py-2">Projected Profit</th>
-                      <th className="px-4 py-2">Projected IS%</th>
-                      <th className="px-4 py-2">Change</th>
-                      <th className="px-4 py-2">Profit Impact</th>
-                      <th className="px-4 py-2">Budget Gain</th>
-                      <th className="px-4 py-2">Rank Gain</th>
-                      <th className="px-4 py-2">Change Reason</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {campaignProjections.slice(0, rowLimit).map(projection => {
-                      const campaign = campaigns.find(c => c.Campaign === projection.name)!;
-                      // Only calculate lost budget dollars if over 5% threshold
-                      const significantLostBudget = campaign.LostToBudget > 0.05 ? campaign.LostToBudget : 0;
-                      const lostBudgetDollars = significantLostBudget > 0 ? 
-                        (significantLostBudget / campaign.ImprShare) * campaign.Cost : 0;
-
-                      return (
-                        <tr key={projection.name} className="border-b">
-                          <td className="px-4 py-2">{projection.name}</td>
-                          <td className="px-4 py-2">${Math.round(projection.currentCost).toLocaleString()}</td>
-                          <td className="px-4 py-2">
-                            <span className={projection.currentProfit < 0 ? 'text-red-500 font-bold' : ''}>
-                              ${Math.round(projection.currentProfit).toLocaleString()}
-                            </span>
-                          </td>
-                          <td className="px-4 py-2">{projection.currentIS.toFixed(1)}%</td>
-                          <td className="px-4 py-2">${Math.round(lostBudgetDollars).toLocaleString()}</td>
-                          <td className="px-4 py-2">${Math.round(projection.projectedCost).toLocaleString()}</td>
-                          <td className="px-4 py-2">
-                            <span className={projection.projectedProfit < 0 ? 'text-red-500 font-bold' : ''}>
-                              ${Math.round(projection.projectedProfit).toLocaleString()}
-                            </span>
-                          </td>
-                          <td className="px-4 py-2">{projection.projectedIS.toFixed(1)}%</td>
-                          <td className="px-4 py-2">
-                            <span className={projection.percentChange < 0 ? 'text-red-500 font-bold' : ''}>
-                              {projection.percentChange === 0 ? '-' : 
-                               `${projection.percentChange > 0 ? '+' : ''}${projection.percentChange.toFixed(1)}%`}
-                              </span>
-                            </td>
-                          <td className="px-4 py-2">
-                            <span className={projection.profitChange < 0 ? 'text-red-500 font-bold' : 
-                                              projection.profitChange > 0 ? 'text-green-500' : ''}>
-                              {projection.profitChange === 0 ? '-' :
-                               `${projection.profitChange > 0 ? '+' : ''}$${Math.round(Math.abs(projection.profitChange)).toLocaleString()}`}
-                              </span>
-                            </td>
-                          <td className="px-4 py-2">
-                            {projection.budgetGain > 0 && significantLostBudget > 0 ? 
-                              `$${Math.round(projection.budgetGain).toLocaleString()}` : 
-                              '-'}
-                          </td>
-                          <td className="px-4 py-2">
-                            {projection.rankGain > 0 ? 
-                              `$${Math.round(projection.rankGain).toLocaleString()}` : 
-                              '-'}
-                          </td>
-                          <td className="px-4 py-2">{projection.changeReason}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="analysis">
-          <div className="space-y-6">
-            {/* Campaign Selection, Sliders, Chart section */}
-            <div className="flex gap-5">
-              {/* Left Column - 30% width */}
-              <div className="w-[30%] space-y-5">
-                {/* Campaign Selection */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Campaign Selection</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <Select value={selectedCampaign} onValueChange={setSelectedCampaign}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a campaign" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {campaigns.map((campaign) => (
-                          <SelectItem key={campaign.Campaign} value={campaign.Campaign}>
-                            {campaign.Campaign}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </CardContent>
-                </Card>
-
-                {/* Cost Slider */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Cost</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <Slider
-                      min={0}
-                      max={Math.max(...campaigns.map(c => c.Cost)) * 1.5}
-                      step={100}
-                      value={[cost]}
-                      onValueChange={(value) => setCost(value[0])}
-                    />
-                    <p className="text-center mt-2">${Math.round(cost).toLocaleString()}</p>
-                  </CardContent>
-                </Card>
-
-                {/* Revenue Slider */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Revenue</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <Slider
-                      min={0}
-                      max={Math.max(...campaigns.map(c => c.ConvValue)) * 1.5}
-                      step={100}
-                      value={[convValue]}
-                      onValueChange={(value) => setConvValue(value[0])}
-                    />
-                    <p className="text-center mt-2">${Math.round(convValue).toLocaleString()}</p>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Right Column - 65% width */}
-              <Card className="w-[65%]">
-                <CardHeader>
-                  <CardTitle>
-                    {activeChart === 'profit-curve' && 'Profit Curve'}
-                    {activeChart === 'incremental-profit' && 'Incremental Profit'}
-                    {activeChart === 'profit-vs-roas' && 'Profit vs ROAS'}
-                    {activeChart === 'marginal-roas' && 'Marginal ROAS'}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-[400px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      {renderActiveChart()}
-                    </ResponsiveContainer>
-                  </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-                    <ChartThumbnail
-                      title="Profit Curve"
-                      isActive={activeChart === 'profit-curve'}
-                      onClick={() => setActiveChart('profit-curve')}
-                    >
-                      <ResponsiveContainer>
-                        <LineChart data={profitData}>
-                          <Line type="monotone" dataKey="profit" stroke="#8884d8" dot={false} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </ChartThumbnail>
-                    <ChartThumbnail
-                      title="Incremental Profit"
-                      isActive={activeChart === 'incremental-profit'}
-                      onClick={() => setActiveChart('incremental-profit')}
-                    >
-                      <ResponsiveContainer>
-                        <LineChart data={incrementalData}>
-                          <Line type="monotone" dataKey="incrementalProfit" stroke="#22c55e" dot={false} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </ChartThumbnail>
-                    <ChartThumbnail
-                      title="Profit vs ROAS"
-                      isActive={activeChart === 'profit-vs-roas'}
-                      onClick={() => setActiveChart('profit-vs-roas')}
-                    >
-                      <ResponsiveContainer>
-                        <LineChart data={profitData}>
-                          <Line type="monotone" dataKey="profit" stroke="#8b5cf6" dot={false} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </ChartThumbnail>
-                    <ChartThumbnail
-                      title="Marginal ROAS"
-                      isActive={activeChart === 'marginal-roas'}
-                      onClick={() => setActiveChart('marginal-roas')}
-                    >
-                      <ResponsiveContainer>
-                        <LineChart data={profitData}>
-                          <Line type="monotone" dataKey="marginalROAS" stroke="#ef4444" dot={false} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </ChartThumbnail>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Profit Analysis Card */}
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-        </TabsContent>
-      </Tabs>
+        </CardContent>
+      </Card>
     </>
-  )
+  );
 } 

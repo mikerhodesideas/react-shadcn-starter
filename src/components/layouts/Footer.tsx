@@ -1,5 +1,3 @@
-import { ModeToggle } from "../mode-toggle";
-
 export default function Footer() {
     return (
         <footer className="py-6 md:px-8 md:py-0">
@@ -9,7 +7,6 @@ export default function Footer() {
                         Built by MikeRhodes.com.au
                     </p>
                 </div>
-                <ModeToggle />
             </div>
         </footer>
     );

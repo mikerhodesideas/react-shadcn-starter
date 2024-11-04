@@ -1,8 +1,10 @@
 import { createBrowserRouter } from "react-router-dom";
 import AppLayout from "@/components/layouts/AppLayout";
 import NoMatch from "@/pages/NoMatch";
-import Sample from "@/pages/Sample";
-import Profit from "@/pages/Profit";
+import DailyTrends from "@/pages/DailyTrends";
+import CampaignAnalysis from "@/pages/Profit";
+import ProfitCurve from "@/pages/ProfitAnalysis";
+import Settings from "@/pages/Settings";
 
 export const router = createBrowserRouter([
     {
@@ -11,11 +13,19 @@ export const router = createBrowserRouter([
         children: [
             {
                 index: true,
-                element: <Profit />,
+                element: <CampaignAnalysis />,
             },
             {
-                path: "/sample",
-                element: <Sample />,
+                path: "/daily",
+                element: <DailyTrends />,
+            },
+            {
+                path: "/curve",
+                element: <ProfitCurve />,
+            },
+            {
+                path: "/settings",
+                element: <Settings />,
             },
             {
                 path: "*",
