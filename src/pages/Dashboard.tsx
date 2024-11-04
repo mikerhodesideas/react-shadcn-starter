@@ -5,12 +5,12 @@ export default function Dashboard() {
     return (
         <>
             <PageHeader>
-                <PageHeaderHeading>Dashboard</PageHeaderHeading>
+                <PageHeaderHeading>Start Here</PageHeaderHeading>
             </PageHeader>
             <Card>
                 <CardHeader>
-                    <CardTitle>React Shadcn Starter</CardTitle>
-                    <CardDescription>React + Vite + TypeScript template for building apps with shadcn/ui.</CardDescription>
+                    <CardTitle>Google Ads Data Viewer</CardTitle>
+                    <CardDescription>A tool to view and analyze Google Ads data.</CardDescription>
                 </CardHeader>
             </Card>
         </>

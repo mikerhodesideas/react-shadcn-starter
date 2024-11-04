@@ -1,19 +1,15 @@
 import { Outlet } from "react-router-dom";
 import { Header } from "./Header";
-import { Footer } from "./Footer";
+import Footer from "./Footer";
 
-export function Applayout() {
+export default function AppLayout() {
     return (
-        <>
+        <div className="relative flex min-h-screen flex-col">
             <Header />
-            <div className="flex-grow flex flex-col">
-                <div className="container px-4 md:px-8 flex-grow flex flex-col">
-                    <Outlet />
-                </div>
-            </div>
-            <div className="container px-4 md:px-8">
-                <Footer />
-            </div>
-        </>
-    )
+            <main className="flex-1 container py-6">
+                <Outlet />
+            </main>
+            <Footer />
+        </div>
+    );
 }
