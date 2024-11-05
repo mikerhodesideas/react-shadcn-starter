@@ -1,4 +1,5 @@
 import * as React from "react"
+import { type ToastActionElement, type ToastProps } from "@/types/toast"
 import * as ToastPrimitives from "@radix-ui/react-toast"
 import { cn } from "@/lib/utils"
 import { X } from "lucide-react"
@@ -79,4 +80,5 @@ const ToastDescription = React.forwardRef<
 ))
 ToastDescription.displayName = ToastPrimitives.Description.displayName
 
-export { ToastProvider, ToastViewport, Toast, ToastTitle, ToastDescription, ToastClose } 
+export { ToastProvider, ToastViewport, Toast, ToastTitle, ToastDescription, ToastClose }
+export type { ToastProps, ToastActionElement } 

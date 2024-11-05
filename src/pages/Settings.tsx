@@ -1,155 +1,161 @@
+//settings.tsx
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { useToast } from "@/components/ui/use-toast"
-import { Loader2, RefreshCw } from 'lucide-react'
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import DriveDownloader from '@/lib/drive-downloader'
+import { Button } from "@/components/ui/button"
+import { Loader2 } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { useToast } from "@/components/ui/use-toast"
+import { GOOGLE_SHEET_URL, STORAGE_KEYS } from "@/lib/constants"
 
-interface CacheStatus {
-  timestamp: number;
-  fileCount: number;
+interface RawMetrics {
+  Date: string
+  Clicks: number
+  LostToBudget: number
+  ImprShare: number
+  LostToRank: number
+  ConvValue: number
+  Conversions: number
+  Cost: number
+  Impressions: number
+  'campaign.resourceName': string
+  Campaign: string
+  CampaignId: number
 }
 
-const TEST_FOLDER_ID = '1In-JbYLAim0OoCrQw0uvvHTtBofTNROk';
+interface ProcessedMetrics {
+  date: string
+  campaign: string
+  impr: number
+  clicks: number
+  cost: number
+  conv: number
+  value: number
+  lostToBudget: number
+  imprShare: number
+  lostToRank: number
+  campaignId: number
+}
 
 export default function Settings() {
-  const [folderId, setFolderId] = useState(TEST_FOLDER_ID)
-  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [sheetUrl, setSheetUrl] = useState(GOOGLE_SHEET_URL)
+  const [data, setData] = useState<ProcessedMetrics[]>([])
   const { toast } = useToast()
-  const [cacheStatus, setCacheStatus] = useState<CacheStatus | null>(null)
 
-  // Check cache status on mount
-  useEffect(() => {
-    const cacheKey = `drive_folder_${TEST_FOLDER_ID}`;
-    const cached = localStorage.getItem(cacheKey);
-    if (cached) {
-      const { data, timestamp } = JSON.parse(cached);
-      setCacheStatus({
-        timestamp,
-        fileCount: data.length
-      });
-    }
-  }, []);
-
-  const handleRefresh = async () => {
-    if (!folderId) {
-      toast({
-        title: "Error",
-        description: "Please enter a folder ID",
-        variant: "destructive",
-      })
-      return
-    }
-
-    setIsRefreshing(true)
-    try {
-      const files = await DriveDownloader.downloadFromFolder(folderId);
-      
-      setCacheStatus({
-        timestamp: Date.now(),
-        fileCount: files.length
-      });
-
-      toast({
-        title: "CSV Files Refreshed",
-        description: `Successfully refreshed ${files.length} files.`,
-      })
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to refresh CSV files",
-        variant: "destructive",
-      })
-    } finally {
-      setIsRefreshing(false)
-    }
+  const processRawData = (rawData: RawMetrics[]): ProcessedMetrics[] => {
+    return rawData.map(row => ({
+      date: new Date(row.Date).toISOString().split('T')[0],
+      campaign: row.Campaign,
+      impr: row.Impressions,
+      clicks: row.Clicks,
+      cost: row.Cost,
+      conv: row.Conversions,
+      value: row.ConvValue,
+      lostToBudget: row.LostToBudget,
+      imprShare: row.ImprShare,
+      lostToRank: row.LostToRank,
+      campaignId: row.CampaignId
+    }))
   }
 
-  const clearCache = () => {
-    DriveDownloader.clearCache(folderId);
-    setCacheStatus(null);
-    toast({
-      title: "Cache Cleared",
-      description: "CSV file cache has been cleared.",
-    });
+  const fetchData = async () => {
+    setIsLoading(true)
+    try {
+      const response = await fetch(sheetUrl)
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
+      
+      const rawData = await response.json()
+      console.log("Raw data received:", rawData.slice(0, 2))
+
+      const processedData = processRawData(rawData)
+      
+      // Just store in localStorage - that's all we need
+      const timestamp = new Date().toISOString()
+      localStorage.setItem(STORAGE_KEYS.CAMPAIGN_DATA, JSON.stringify({
+        timestamp,
+        daily: processedData,
+        thirty_days: processedData
+      }))
+
+      setData(processedData)
+      
+      toast({
+        title: "Success",
+        description: `Loaded ${processedData.length} rows of data`
+      })
+
+    } catch (error) {
+      console.error('Error:', error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to load data"
+      })
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
-    <div className="space-y-6">
+    <div className="container mx-auto py-6">
       <Card>
         <CardHeader>
-          <CardTitle>CSV Data Source</CardTitle>
+          <CardTitle>Data Settings</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-6">
           <div className="space-y-2">
-            <Label htmlFor="folder-id">Google Drive Folder ID</Label>
-            <Input
-              id="folder-id"
-              placeholder="Enter the shared folder ID"
-              value={folderId}
-              onChange={(e) => setFolderId(e.target.value)}
-              className="font-mono"
-            />
-            <p className="text-sm text-muted-foreground">
-              Using test folder with 6 CSV files: 30day_totals.csv, campaign_settings.csv, daily_metrics.csv, etc.
-            </p>
-          </div>
-
-          <div className="flex gap-4">
-            <Button
-              onClick={handleRefresh}
-              disabled={isRefreshing}
-              className="flex-1"
-            >
-              {isRefreshing ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Refreshing CSV Files...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                  Refresh CSV Files
-                </>
-              )}
-            </Button>
-
-            <Button
-              onClick={clearCache}
-              variant="outline"
-              disabled={isRefreshing || !cacheStatus}
-            >
-              Clear Cache
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Cache Status</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            <div className="flex justify-between items-center">
-              <span>Last Updated:</span>
-              <span className="text-muted-foreground">
-                {cacheStatus ? new Date(cacheStatus.timestamp).toLocaleString() : 'Never'}
-              </span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span>Files Cached:</span>
-              <span className="text-muted-foreground">
-                {cacheStatus?.fileCount || 0}
-              </span>
+            <label className="text-sm font-medium">Google Sheet URL</label>
+            <div className="flex gap-2">
+              <Input
+                value={sheetUrl}
+                onChange={(e) => setSheetUrl(e.target.value)}
+                placeholder="Enter Google Sheet Web App URL"
+              />
+              <Button onClick={fetchData} disabled={isLoading}>
+                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Load Data
+              </Button>
             </div>
           </div>
+
+          {/* Data Preview */}
+          {data.length > 0 && (
+            <div className="mt-6">
+              <h3 className="text-lg font-medium mb-4">Data Preview (First 3 Rows)</h3>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left">Date</th>
+                      <th className="px-4 py-2 text-left">Campaign</th>
+                      <th className="px-4 py-2 text-right">Impr</th>
+                      <th className="px-4 py-2 text-right">Clicks</th>
+                      <th className="px-4 py-2 text-right">Cost</th>
+                      <th className="px-4 py-2 text-right">Conv</th>
+                      <th className="px-4 py-2 text-right">Value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.slice(0, 3).map((row, idx) => (
+                      <tr key={idx} className="border-b">
+                        <td className="px-4 py-2">{row.date}</td>
+                        <td className="px-4 py-2">{row.campaign}</td>
+                        <td className="px-4 py-2 text-right">{row.impr.toLocaleString()}</td>
+                        <td className="px-4 py-2 text-right">{row.clicks.toLocaleString()}</td>
+                        <td className="px-4 py-2 text-right">${row.cost.toFixed(2)}</td>
+                        <td className="px-4 py-2 text-right">{row.conv.toFixed(1)}</td>
+                        <td className="px-4 py-2 text-right">${row.value.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
   )
-} 
+}

@@ -1,25 +1,26 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-// ... import other necessary components
+'use client'
 
-export function ProfitCurve({
-  selectedCampaign,
-  setSelectedCampaign,
-  cost,
-  setCost,
-  convValue,
-  setConvValue,
-  campaigns,
-  currentMetrics,
-  profitData,
-  optimalPoint,
-  optimalZone,
-  activeChart,
-  setActiveChart,
-  incrementalData,
-  cogsPercentage
-}: {
-  // ... add proper types
-}) {
+import { type ProfitCurveProps } from "@/types/metrics"
+
+export function ProfitCurve(props: ProfitCurveProps) {
+  const {
+    selectedCampaign,
+    setSelectedCampaign,
+    cost,
+    setCost,
+    convValue,
+    setConvValue,
+    campaigns,
+    currentMetrics,
+    profitData,
+    optimalPoint,
+    optimalZone,
+    activeChart,
+    setActiveChart,
+    incrementalData,
+    cogsPercentage
+  } = props
+
   return (
     <div className="space-y-6">
       {/* Move all profit curve related sections here */}

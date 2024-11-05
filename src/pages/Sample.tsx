@@ -46,7 +46,7 @@ export default function Sample() {
     useEffect(() => {
         const loadData = async () => {
             try {
-                const response = await fetch('/src/data/daily.csv');
+                const response = await fetch('/data/daily.csv');
                 if (!response.ok) {
                     throw new Error('Failed to fetch CSV file');
                 }

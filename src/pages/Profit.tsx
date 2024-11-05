@@ -1,3 +1,4 @@
+//profit.tsx
 "use client"
 
 import { useState, useMemo, useEffect } from 'react'
@@ -16,7 +17,8 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { ChevronDown, ChevronUp } from "lucide-react" // For the toggle icon
-import { DateRangeSelector } from "@/components/date-range-selector"
+import { DatePicker } from "@/components/ui/date-picker"
+import { STORAGE_KEYS } from '@/lib/constants'
 
 interface CampaignData {
   Campaign: string;
@@ -239,78 +241,29 @@ export default function Profit() {
   }, [isLoading, campaigns, selectedCampaign, error]);
 
   // Load data
-  useEffect(() => {
-    const loadData = async () => {
-      setIsLoading(true);
-      try {
-        const response = await fetch('/30day.csv');
-        if (!response.ok) {
-          throw new Error(`Failed to fetch CSV file: ${response.status} ${response.statusText}`);
-        }
-
-        const csvText = await response.text();
-        
-        const result = Papa.parse(csvText, {
-          header: true,
-          transform: (value: string) => {
-            if (!isNaN(Number(value))) return Number(value);
-            return value;
-          }
-        });
-
-        // Process campaign data
-        const campaignData = result.data
-          .filter((row: any) => 
-            row.Campaign && 
-            !isNaN(Number(row.Cost)) && 
-            !isNaN(Number(row.ConvValue)) &&
-            !isNaN(Number(row.Conversions)) &&
-            !isNaN(Number(row.Clicks)) &&
-            !isNaN(Number(row.ImprShare)) &&
-            !isNaN(Number(row.LostToBudget)) &&
-            !isNaN(Number(row.LostToRank)) &&
-            !isNaN(Number(row.Impressions))
-          )
-          .map((row: any) => ({
-            Campaign: row.Campaign,
-            Cost: Number(row.Cost),
-            ConvValue: Number(row.ConvValue),
-            Clicks: Number(row.Clicks),
-            Conversions: Number(row.Conversions),
-            ImprShare: Number(row.ImprShare),
-            LostToBudget: Number(row.LostToBudget),
-            LostToRank: Number(row.LostToRank),
-            Impressions: Number(row.Impressions)
-          }))
-          // Sort by Cost descending (highest first)
-          .sort((a, b) => b.Cost - a.Cost);
-
-        if (campaignData.length === 0) {
-          throw new Error('No valid campaign data found in CSV');
-        }
-
-        // Set campaigns
-        setCampaigns(campaignData);
-
-        // Initialize with highest-cost campaign
-        const topCampaign = campaignData[0];
-        setSelectedCampaign(topCampaign.Campaign);
-        setCost(topCampaign.Cost);
-        setConvValue(topCampaign.ConvValue);
-        setSales(topCampaign.Conversions);
-        // COGS stays at default 30%
-
-        setError(null);
-      } catch (err) {
-        console.error('Error loading data:', err);
-        setError(`Error loading data: ${(err as Error).message}`);
-      } finally {
-        setIsLoading(false);
+  const loadData = () => {
+    try {
+      const cached = localStorage.getItem(STORAGE_KEYS.CAMPAIGN_DATA)
+      if (!cached) {
+        setError("Please load data from Settings first")
+        return
       }
-    };
 
-    loadData();
-  }, []);
+      const { daily } = JSON.parse(cached)
+      setCampaigns(daily)
+      
+    } catch (error) {
+      console.error('Error loading data:', error)
+      setError('Failed to load campaign data')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Replace or add this useEffect
+  useEffect(() => {
+    loadData()
+  }, [])
 
   // Update cost and revenue when campaign changes
   useEffect(() => {

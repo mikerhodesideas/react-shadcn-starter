@@ -1,85 +1,80 @@
+'use client'
+
+import { useCampaignData } from "@/contexts/campaign-data"
+import { useState, useEffect, useMemo } from 'react'
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Loader2 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Slider } from "@/components/ui/slider"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, ReferenceArea } from 'recharts'
 import { ChartThumbnail } from "@/components/chart-thumbnail"
-import { useState, useEffect, useMemo } from 'react'
-import Papa from 'papaparse'
 
-// Import all the types from Profit.tsx
-import type { CampaignData, ChartType } from '@/pages/Profit'
+type ChartType = 'profit-curve' | 'incremental-profit' | 'profit-vs-roas' | 'marginal-roas';
 
 export default function ProfitAnalysis() {
-  const [campaigns, setCampaigns] = useState<CampaignData[]>([]);
-  const [selectedCampaign, setSelectedCampaign] = useState<string>('');
-  const [cost, setCost] = useState(0);
-  const [convValue, setConvValue] = useState(0);
-  const [cogsPercentage, setCogsPercentage] = useState(50);
-  const [activeChart, setActiveChart] = useState<ChartType>('profit-curve');
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const { thirtyDayData: data, isLoading, error } = useCampaignData()
+  const [selectedCampaign, setSelectedCampaign] = useState<string>('')
+  const [cost, setCost] = useState(0)
+  const [convValue, setConvValue] = useState(0)
+  const [cogsPercentage, setCogsPercentage] = useState(50)
+  const [activeChart, setActiveChart] = useState<ChartType>('profit-curve')
 
-  // Load data
-  useEffect(() => {
-    const loadData = async () => {
-      setIsLoading(true);
-      try {
-        const response = await fetch('/30day.csv');
-        if (!response.ok) {
-          throw new Error(`Failed to fetch CSV file: ${response.status} ${response.statusText}`);
-        }
-
-        const csvText = await response.text();
-        
-        const result = Papa.parse(csvText, {
-          header: true,
-          transform: (value: string) => {
-            if (!isNaN(Number(value))) return Number(value);
-            return value;
-          }
-        });
-
-        const campaignData = result.data
-          .filter((row: any) => 
-            row.Campaign && 
-            !isNaN(Number(row.Cost)) && 
-            !isNaN(Number(row.ConvValue)) &&
-            !isNaN(Number(row.Conversions)) &&
-            !isNaN(Number(row.Clicks)) &&
-            !isNaN(Number(row.ImprShare)) &&
-            !isNaN(Number(row.LostToBudget)) &&
-            !isNaN(Number(row.LostToRank)) &&
-            !isNaN(Number(row.Impressions))
-          )
-          .map((row: any) => ({
-            Campaign: row.Campaign,
-            Cost: Number(row.Cost),
-            ConvValue: Number(row.ConvValue),
-            Clicks: Number(row.Clicks),
-            Conversions: Number(row.Conversions),
-            ImprShare: Number(row.ImprShare),
-            LostToBudget: Number(row.LostToBudget),
-            LostToRank: Number(row.LostToRank),
-            Impressions: Number(row.Impressions)
-          }))
-          .sort((a, b) => b.Cost - a.Cost);
-
-        setCampaigns(campaignData);
-        if (campaignData.length > 0) {
-          setSelectedCampaign(campaignData[0].Campaign);
-          setCost(campaignData[0].Cost);
-          setConvValue(campaignData[0].ConvValue);
-        }
-      } catch (err) {
-        console.error('Error loading data:', err);
-        setError(`Error loading data: ${(err as Error).message}`);
-      } finally {
-        setIsLoading(false);
+  // Get unique campaigns and their metrics
+  const campaigns = useMemo(() => {
+    if (!data.length) return []
+    
+    const campaignMap = new Map()
+    data.forEach(row => {
+      if (!campaignMap.has(row.campaign)) {
+        campaignMap.set(row.campaign, {
+          Campaign: row.campaign,
+          Cost: 0,
+          ConvValue: 0,
+          Clicks: 0,
+          Conversions: 0,
+          ImprShare: 0,
+          LostToBudget: 0,
+          LostToRank: 0,
+          Impressions: 0
+        })
       }
-    };
+      
+      const campaign = campaignMap.get(row.campaign)
+      campaign.Cost += row.cost
+      campaign.ConvValue += row.value
+      campaign.Clicks += row.clicks
+      campaign.Conversions += row.conv
+      campaign.Impressions += row.impr
+    })
 
-    loadData();
-  }, []);
+    return Array.from(campaignMap.values())
+  }, [data])
+
+  // Set initial campaign when data loads
+  useEffect(() => {
+    if (campaigns.length > 0 && !selectedCampaign) {
+      setSelectedCampaign(campaigns[0].Campaign)
+      setCost(campaigns[0].Cost)
+      setConvValue(campaigns[0].ConvValue)
+    }
+  }, [campaigns, selectedCampaign])
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>{error}</AlertDescription>
+      </Alert>
+    )
+  }
 
   // Calculate current metrics
   const currentMetrics = useMemo(() => {
@@ -212,11 +207,13 @@ export default function ProfitAnalysis() {
   }, [profitData, cost]);
 
   // Render active chart
-  const renderActiveChart = () => {
+  const renderActiveChart = (): React.ReactElement => {
     switch (activeChart) {
-      case 'profit-curve':
+      case 'profit-curve': {
         const campaign = campaigns.find(c => c.Campaign === selectedCampaign);
-        if (!campaign) return null;
+        if (!campaign) {
+          return <div className="flex items-center justify-center h-full">Select a campaign</div>;
+        }
 
         const currentIS = campaign.ImprShare;
         const lostToBudget = campaign.LostToBudget;
@@ -270,8 +267,153 @@ export default function ProfitAnalysis() {
             />
           </LineChart>
         );
-
-      // ... other chart cases ...
+      }
+      case 'incremental-profit':
+        return (
+          <LineChart 
+            data={incrementalData}
+            margin={{ top: 20, right: 30, bottom: 5, left: 20 }}
+            className="text-foreground"
+          >
+            <CartesianGrid 
+              strokeDasharray="3 3" 
+              vertical={false}
+              stroke="currentColor" 
+              opacity={0.1} 
+            />
+            <XAxis 
+              dataKey="cost" 
+              tickFormatter={(value) => `$${Math.round(value/1000)}k`}
+              stroke="currentColor"
+            />
+            <YAxis 
+              tickFormatter={(value) => `$${Math.round(value/1000)}k`}
+              stroke="currentColor"
+            />
+            <Tooltip 
+              formatter={(value: number) => [`$${Math.round(value).toLocaleString()}`, 'Profit']}
+              labelFormatter={(label: number) => `Cost: $${Math.round(label).toLocaleString()}`}
+              contentStyle={{ 
+                backgroundColor: 'hsl(var(--background))',
+                border: '1px solid hsl(var(--border))',
+                borderRadius: '8px'
+              }}
+            />
+            
+            <ReferenceArea
+              x1={optimalZone.start}
+              x2={optimalZone.end}
+              fill="#22c55e"
+              fillOpacity={0.1}
+            />
+            
+            <Line 
+              type="monotone" 
+              dataKey="incrementalProfit" 
+              stroke="#22c55e" 
+              dot={false}
+              strokeWidth={2}
+            />
+          </LineChart>
+        );
+      case 'profit-vs-roas':
+        return (
+          <LineChart 
+            data={profitData}
+            margin={{ top: 20, right: 30, bottom: 5, left: 20 }}
+            className="text-foreground"
+          >
+            <CartesianGrid 
+              strokeDasharray="3 3" 
+              vertical={false}
+              stroke="currentColor" 
+              opacity={0.1} 
+            />
+            <XAxis 
+              dataKey="cost" 
+              tickFormatter={(value) => `$${Math.round(value/1000)}k`}
+              stroke="currentColor"
+            />
+            <YAxis 
+              tickFormatter={(value) => `$${Math.round(value/1000)}k`}
+              stroke="currentColor"
+            />
+            <Tooltip 
+              formatter={(value: number) => [`$${Math.round(value).toLocaleString()}`, 'Profit']}
+              labelFormatter={(label: number) => `Cost: $${Math.round(label).toLocaleString()}`}
+              contentStyle={{ 
+                backgroundColor: 'hsl(var(--background))',
+                border: '1px solid hsl(var(--border))',
+                borderRadius: '8px'
+              }}
+            />
+            
+            <ReferenceArea
+              x1={optimalZone.start}
+              x2={optimalZone.end}
+              fill="#22c55e"
+              fillOpacity={0.1}
+            />
+            
+            <Line 
+              type="monotone" 
+              dataKey="profit" 
+              stroke="#8b5cf6" 
+              dot={false}
+              strokeWidth={2}
+            />
+          </LineChart>
+        );
+      case 'marginal-roas':
+        return (
+          <LineChart 
+            data={profitData}
+            margin={{ top: 20, right: 30, bottom: 5, left: 20 }}
+            className="text-foreground"
+          >
+            <CartesianGrid 
+              strokeDasharray="3 3" 
+              vertical={false}
+              stroke="currentColor" 
+              opacity={0.1} 
+            />
+            <XAxis 
+              dataKey="cost" 
+              tickFormatter={(value) => `$${Math.round(value/1000)}k`}
+              stroke="currentColor"
+            />
+            <YAxis 
+              tickFormatter={(value) => `$${Math.round(value/1000)}k`}
+              stroke="currentColor"
+            />
+            <Tooltip 
+              formatter={(value: number) => [`$${Math.round(value).toLocaleString()}`, 'Profit']}
+              labelFormatter={(label: number) => `Cost: $${Math.round(label).toLocaleString()}`}
+              contentStyle={{ 
+                backgroundColor: 'hsl(var(--background))',
+                border: '1px solid hsl(var(--border))',
+                borderRadius: '8px'
+              }}
+            />
+            
+            <ReferenceArea
+              x1={optimalZone.start}
+              x2={optimalZone.end}
+              fill="#22c55e"
+              fillOpacity={0.1}
+            />
+            
+            <Line 
+              type="monotone" 
+              dataKey="marginalROAS" 
+              stroke="#ef4444" 
+              dot={false}
+              strokeWidth={2}
+            />
+          </LineChart>
+        );
+      default:
+        return <div>Select a chart type</div>;
     }
   };
 
@@ -414,7 +556,7 @@ export default function ProfitAnalysis() {
           <ul className="space-y-2">
             <li>Maximum Profit: ${Math.round(optimalZone.maxProfit).toLocaleString()}</li>
             <li>Optimal Cost: ${Math.round(optimalZone.current).toLocaleString()}</li>
-            <li>Optimal ROAS: {optimalZone.maxProfit / optimalZone.current.toFixed(1)}x</li>
+            <li>Optimal ROAS: {(optimalZone.maxProfit / Number(optimalZone.current)).toFixed(1)}x</li>
             <li>Expected Sales: {Math.round(optimalZone.maxProfit / optimalZone.current * optimalZone.current).toLocaleString()}</li>
             <li>Gross Profit: ${Math.round(optimalZone.maxProfit).toLocaleString()}</li>
             <li>COGS: {cogsPercentage}%</li>

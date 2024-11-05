@@ -1,21 +1,15 @@
+'use client'
+
 import { useState, useMemo, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Line, LineChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend } from "recharts"
-import Papa from 'papaparse'
-
-interface DailyData {
-  Date: string
-  Campaign: string
-  Cost: number
-  Clicks: number
-  Impressions: number
-  Conversions: number
-  ConvValue: number
-}
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Loader2 } from "lucide-react"
+import { useCampaignData } from "@/contexts/campaign-data"
 
 interface Metric {
-  key: keyof Omit<DailyData, 'Date' | 'Campaign'>
+  key: 'impr' | 'clicks' | 'cost' | 'conv' | 'value'
   label: string
   format: (value: number) => string
   color: string
@@ -23,89 +17,75 @@ interface Metric {
 
 const metrics: Metric[] = [
   { 
-    key: 'Cost', 
-    label: 'Cost', 
-    format: (v) => `$${Math.round(v).toLocaleString()}`,
-    color: '#0ea5e9' // sky-500
-  },
-  { 
-    key: 'Clicks', 
-    label: 'Clicks', 
-    format: (v) => Math.round(v).toLocaleString(),
-    color: '#22c55e' // green-500
-  },
-  { 
-    key: 'Impressions', 
+    key: 'impr', 
     label: 'Impressions', 
     format: (v) => Math.round(v).toLocaleString(),
-    color: '#f97316' // orange-500
+    color: '#f97316'
   },
   { 
-    key: 'Conversions', 
-    label: 'Conversions', 
+    key: 'clicks', 
+    label: 'Clicks', 
     format: (v) => Math.round(v).toLocaleString(),
-    color: '#8b5cf6' // violet-500
+    color: '#22c55e'
   },
   { 
-    key: 'ConvValue', 
-    label: 'Conv. Value', 
-    format: (v) => `$${Math.round(v).toLocaleString()}`,
-    color: '#ef4444' // red-500
+    key: 'cost', 
+    label: 'Cost', 
+    format: (v) => `€${v.toFixed(2)}`,
+    color: '#0ea5e9'
+  },
+  { 
+    key: 'conv', 
+    label: 'Conversions', 
+    format: (v) => v.toFixed(1),
+    color: '#8b5cf6'
+  },
+  { 
+    key: 'value', 
+    label: 'Value', 
+    format: (v) => `€${v.toFixed(2)}`,
+    color: '#ef4444'
   }
 ]
 
 export default function DailyTrends() {
-  const [data, setData] = useState<DailyData[]>([])
-  const [campaigns, setCampaigns] = useState<string[]>([])
+  const { dailyData, isLoading, error } = useCampaignData()
   const [selectedCampaign, setSelectedCampaign] = useState<string>('')
   const [selectedMetrics, setSelectedMetrics] = useState<Metric['key'][]>([])
-  const [error, setError] = useState<string | null>(null)
 
-  // Load data
+  // Get unique campaigns
+  const campaigns = useMemo(() => {
+    return Array.from(new Set(dailyData.map(row => row.campaign)))
+  }, [dailyData])
+
+  // Set first campaign as default when data loads
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        const response = await fetch('/daily.csv')
-        if (!response.ok) throw new Error('Failed to fetch data')
-        
-        const csvText = await response.text()
-        const result = Papa.parse<DailyData>(csvText, {
-          header: true,
-          transform: (value: string) => {
-            if (!isNaN(Number(value))) return Number(value)
-            return value
-          }
-        })
-
-        const validData = result.data.filter(row => 
-          row.Date && row.Campaign && !isNaN(row.Cost)
-        )
-
-        setData(validData)
-        
-        // Get unique campaigns
-        const uniqueCampaigns = Array.from(new Set(validData.map(row => row.Campaign)))
-        setCampaigns(uniqueCampaigns)
-        
-        // Set first campaign as default
-        if (uniqueCampaigns.length > 0) {
-          setSelectedCampaign(uniqueCampaigns[0])
-        }
-
-      } catch (err) {
-        console.error('Error loading data:', err)
-        setError(`Error loading data: ${err}`)
-      }
+    if (campaigns.length > 0 && !selectedCampaign) {
+      setSelectedCampaign(campaigns[0])
     }
-
-    loadData()
-  }, [])
+  }, [campaigns, selectedCampaign])
 
   // Filter data for selected campaign
   const filteredData = useMemo(() => {
     if (!selectedCampaign) return []
-    return data.filter(row => row.Campaign === selectedCampaign)
-  }, [data, selectedCampaign])
+    return dailyData.filter(row => row.campaign === selectedCampaign)
+  }, [dailyData, selectedCampaign])
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>{error}</AlertDescription>
+      </Alert>
+    )
+  }
 
   // Calculate totals for scorecards
   const totals = useMemo(() => {
