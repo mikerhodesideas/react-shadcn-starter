@@ -2,37 +2,20 @@ import Balance from "react-wrap-balancer"
 
 import { cn } from "@/lib/utils"
 
-function PageHeader({
-  className,
-  children,
-  ...props
-}: React.HTMLAttributes<HTMLDivElement>) {
+interface PageHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
+  children: React.ReactNode
+}
+
+export function PageHeader({ children, className, ...props }: PageHeaderProps) {
   return (
-    <section
-      className={cn(
-        "pt-6 pb-4 flex items-center justify-between space-y-2",
-        className
-      )}
-      {...props}
-    >
+    <div className="flex flex-col gap-1 pb-6" {...props}>
       {children}
-    </section>
+    </div>
   )
 }
 
-function PageHeaderHeading({
-  className,
-  ...props
-}: React.HTMLAttributes<HTMLHeadingElement>) {
-  return (
-    <h1
-      className={cn(
-        "text-3xl font-semibold tracking-tight my-1",
-        className
-      )}
-      {...props}
-    />
-  )
+export function PageHeaderHeading({ children }: { children: React.ReactNode }) {
+  return <h1 className="text-2xl font-bold tracking-tight">{children}</h1>
 }
 
 function PageHeaderDescription({
@@ -50,4 +33,4 @@ function PageHeaderDescription({
   )
 }
 
-export { PageHeader, PageHeaderHeading, PageHeaderDescription }
+export { PageHeaderDescription }

@@ -1,36 +1,41 @@
-import { createBrowserRouter } from "react-router-dom";
-import AppLayout from "@/components/layouts/AppLayout";
-import NoMatch from "@/pages/NoMatch";
-import DailyTrends from "@/pages/DailyTrends";
-import CampaignAnalysis from "@/pages/Profit";
-import ProfitCurve from "@/pages/ProfitAnalysis";
-import Settings from "@/pages/Settings";
+import { createBrowserRouter, RouterProvider } from "react-router-dom";
+import AppLayout from "@/components/layouts/app-layout";
+import Analysis from "@/pages/analysis";
+import Trends from "@/pages/trends";
+import Curve from "@/pages/curve";
+import Settings from "@/pages/index";
+import ErrorBoundary from "./ErrorBoundart";
 
 export const router = createBrowserRouter([
     {
         path: "/",
         element: <AppLayout />,
+        errorElement: <ErrorBoundary />,
         children: [
             {
                 index: true,
-                element: <CampaignAnalysis />,
-            },
-            {
-                path: "/daily",
-                element: <DailyTrends />,
-            },
-            {
-                path: "/curve",
-                element: <ProfitCurve />,
-            },
-            {
-                path: "/settings",
                 element: <Settings />,
+                errorElement: <ErrorBoundary />,
             },
             {
-                path: "*",
-                element: <NoMatch />,
+                path: "analysis",
+                element: <Analysis />,
+                errorElement: <ErrorBoundary />,
             },
+            {
+                path: "trends",
+                element: <Trends />,
+                errorElement: <ErrorBoundary />,
+            },
+            {
+                path: "curve",
+                element: <Curve />,
+                errorElement: <ErrorBoundary />,
+            }
         ],
     },
 ]);
+
+export default function Router() {
+    return <RouterProvider router={router} />
+}

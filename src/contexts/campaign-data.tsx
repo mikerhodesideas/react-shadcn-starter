@@ -1,7 +1,9 @@
+// src/contexts/campaign-data.tsx
+
 'use client'
 
 import { createContext, useContext, useState, useEffect } from 'react'
-import { STORAGE_KEYS } from '@/lib/constants'
+import { DataService } from '@/services/data-service'
 
 interface CampaignDataContextType {
   dailyData: any[]
@@ -23,16 +25,14 @@ export function CampaignDataProvider({ children }: { children: React.ReactNode }
 
   const refreshData = () => {
     try {
-      const cached = localStorage.getItem(STORAGE_KEYS.CAMPAIGN_DATA)
-      if (!cached) {
-        throw new Error('No data available - please load data in Settings')
+      const data = DataService.loadData()
+      if (!data?.daily || !data?.thirty_days) {
+        throw new Error('Invalid data format')
       }
 
-      const { timestamp, daily, thirty_days } = JSON.parse(cached)
-      
-      setDailyData(daily)
-      setThirtyDayData(thirty_days)
-      setLastUpdated(new Date(timestamp))
+      setDailyData(data.daily)
+      setThirtyDayData(data.thirty_days)
+      setLastUpdated(new Date(data.timestamp))
       setError(null)
     } catch (err) {
       console.error('Error loading campaign data:', err)

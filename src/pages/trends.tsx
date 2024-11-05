@@ -48,15 +48,16 @@ const metrics: Metric[] = [
   }
 ]
 
-export default function DailyTrends() {
-  const { dailyData, isLoading, error } = useCampaignData()
+export default function Trends() {
+  const { dailyData: data, isLoading, error } = useCampaignData()
+  
+  const campaigns = useMemo(() => {
+    if (!data?.length) return []
+    return Array.from(new Set(data.map(row => row.campaign)))
+  }, [data])
+
   const [selectedCampaign, setSelectedCampaign] = useState<string>('')
   const [selectedMetrics, setSelectedMetrics] = useState<Metric['key'][]>([])
-
-  // Get unique campaigns
-  const campaigns = useMemo(() => {
-    return Array.from(new Set(dailyData.map(row => row.campaign)))
-  }, [dailyData])
 
   // Set first campaign as default when data loads
   useEffect(() => {
@@ -68,8 +69,8 @@ export default function DailyTrends() {
   // Filter data for selected campaign
   const filteredData = useMemo(() => {
     if (!selectedCampaign) return []
-    return dailyData.filter(row => row.campaign === selectedCampaign)
-  }, [dailyData, selectedCampaign])
+    return data.filter(row => row.campaign === selectedCampaign)
+  }, [data, selectedCampaign])
 
   if (isLoading) {
     return (

@@ -1,5 +1,5 @@
 import * as React from "react"
-import type { ToasterToast, ToastActionElement } from "@/types/toast"
+import { ToastActionElement, ToasterToast } from "@/types/toast"
 
 const TOAST_LIMIT = 1
 const TOAST_REMOVE_DELAY = 1000000
@@ -141,6 +141,7 @@ function toast({ ...props }: Toast) {
     toast: {
       ...props,
       id,
+      open: true,
       onOpenChange: (open: boolean) => {
         if (!open) dismiss()
       },

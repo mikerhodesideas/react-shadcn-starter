@@ -1,16 +1,18 @@
 'use client'
 
-import { useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Loader2 } from "lucide-react"
-import { Input } from "@/components/ui/input"
+import { useState, useEffect } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui"
+import { Button } from "@/components/ui"
+import { Input } from "@/components/ui"
 import { useToast } from "@/components/ui/use-toast"
+import { GOOGLE_SHEET_URL } from "@/lib/constants"
+import { DataService } from "@/services/data-service"
+import { Loader2 } from "lucide-react"
 import { type SheetData } from "@/types/metrics"
 
-export default function Home() {
+export default function Settings() {
   const [isLoading, setIsLoading] = useState(false)
-  const [sheetUrl, setSheetUrl] = useState("")
+  const [sheetUrl, setSheetUrl] = useState(GOOGLE_SHEET_URL)
   const [data, setData] = useState<SheetData[]>([])
   const { toast } = useToast()
 

@@ -1,24 +1,20 @@
-//profit.tsx
+//analysis.tsx
 "use client"
 
 import { useState, useMemo, useEffect } from 'react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Slider } from "@/components/ui/slider"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, ReferenceArea } from 'recharts'
-import { PageHeader, PageHeaderHeading } from "@/components/page-header"
-import Papa from 'papaparse'
-import { ChartThumbnail } from "@/components/chart-thumbnail"
-import { HourCostHeatmap } from "@/components/hour-cost-heatmap";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceArea, ReferenceLine } from 'recharts'
+
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { ChevronDown, ChevronUp } from "lucide-react" // For the toggle icon
-import { DatePicker } from "@/components/ui/date-picker"
-import { STORAGE_KEYS } from '@/lib/constants'
+import { useCampaignData } from "@/contexts/campaign-data"
+import { useSafeCampaignData } from "@/hooks/use-safe-campaign-data"
 
 interface CampaignData {
   Campaign: string;
@@ -177,102 +173,97 @@ const SortableHeader = ({
 // Add a constant for the localStorage key
 const ROW_LIMIT_KEY = 'campaign_row_limit';
 
-export default function Profit() {
-  const [campaigns, setCampaigns] = useState<CampaignData[]>([]);
-  const [selectedCampaign, setSelectedCampaign] = useState<string>('');
-  const [cost, setCost] = useState(0);
-  const [convValue, setConvValue] = useState(0);
-  const [sales, setSales] = useState(0);
-  const [cogsPercentage, setCogsPercentage] = useState(50);
-  const [error, setError] = useState<string | null>(null);
-  const [activeChart, setActiveChart] = useState<ChartType>('profit-curve');
-  const [visualizationType, setVisualizationType] = useState<VisualizationOptions>({
-    type: 'line',
-    xAxis: 'Date',
-    yAxis: 'Cost',
-    normalized: false
-  });
-  const [hourlyData, setHourlyData] = useState<HourlyData[]>([]);
-  const [optimalZone, setOptimalZone] = useState<OptimalZone>({
+export default function Analysis() {
+  console.log('Rendering Analysis component')
+  const { thirtyDayData, isLoading, error } = useCampaignData()
+  console.log('Campaign data context:', { thirtyDayData, isLoading, error })
+
+  // Early returns for data issues
+  if (isLoading) {
+    return <div>Loading campaign data...</div>
+  }
+
+  if (error) {
+    return <div>Error loading data: {error}</div>
+  }
+
+  if (!thirtyDayData?.length) {
+    return <div>No campaign data available. Please load data in Settings.</div>
+  }
+
+  const context = useCampaignData()
+  console.log('Campaign data context:', context)
+  const { thirtyDayData: data, isLoading, error } = useCampaignData()
+  const [selectedCampaign, setSelectedCampaign] = useState<string>('')
+  const [cost, setCost] = useState(0)
+  const [convValue, setConvValue] = useState(0)
+  const [cogsPercentage, setCogsPercentage] = useState(50)
+  const [activeChart, setActiveChart] = useState<ChartType>('profit-curve')
+
+  // Optimal zone state
+  const [optimalZone, setOptimalZone] = useState({
     start: 0,
     end: 0,
     current: 0,
     maxProfit: 0
-  });
-  const [initialMetrics, setInitialMetrics] = useState<CampaignMetrics>({
-    cost: 0,
-    convValue: 0,
-    sales: 0,
-    roas: 0,
-    profit: 0,
-    aov: 0
-  });
+  })
 
-  // Initialize states with proper defaults
-  const [isLoading, setIsLoading] = useState(true);
+  // Filter state
+  const [includeFilter, setIncludeFilter] = useState('')
+  const [excludeFilter, setExcludeFilter] = useState('')
+  const [rowLimit, setRowLimit] = useState(10)
 
-  // Add filter states
-  const [includeFilter, setIncludeFilter] = useState('');
-  const [excludeFilter, setExcludeFilter] = useState('');
+  // Sort state with proper types
+  const [sortState, setSortState] = useState<SortState>({ field: 'profit', direction: 'desc' })
+  const [projectionsSortState, setProjectionsSortState] = useState<SortState>({ field: 'profitChange', direction: 'desc' })
 
-  // Update rowLimit state to use localStorage
-  const [rowLimit, setRowLimit] = useState(() => {
-    const saved = localStorage.getItem(ROW_LIMIT_KEY);
-    return saved ? parseInt(saved, 10) : 10;
-  });
-
-  // Add effect to save rowLimit changes
-  useEffect(() => {
-    localStorage.setItem(ROW_LIMIT_KEY, rowLimit.toString());
-  }, [rowLimit]);
-
-  // Add these states
-  const [sortState, setSortState] = useState<SortState>({ field: 'cost', direction: 'desc' });
-
-  // Add a second sort state for the projections table
-  const [projectionsSortState, setProjectionsSortState] = useState<SortState>({ field: 'currentCost', direction: 'desc' });
-
-  // Debug loading state
-  useEffect(() => {
-    console.log('Loading state:', isLoading);
-    console.log('Campaigns:', campaigns);
-    console.log('Selected Campaign:', selectedCampaign);
-    console.log('Error:', error);
-  }, [isLoading, campaigns, selectedCampaign, error]);
-
-  // Load data
-  const loadData = () => {
-    try {
-      const cached = localStorage.getItem(STORAGE_KEYS.CAMPAIGN_DATA)
-      if (!cached) {
-        setError("Please load data from Settings first")
-        return
+  // Get unique campaigns and their metrics
+  const campaigns = useMemo(() => {
+    if (!data?.length) return []
+    
+    const campaignMap = new Map()
+    data.forEach(row => {
+      if (!campaignMap.has(row.campaign)) {
+        campaignMap.set(row.campaign, {
+          Campaign: row.campaign,
+          Cost: 0,
+          ConvValue: 0,
+          Clicks: 0,
+          Conversions: 0,
+          ImprShare: 0,
+          LostToBudget: 0,
+          LostToRank: 0,
+          Impressions: 0
+        })
       }
-
-      const { daily } = JSON.parse(cached)
-      setCampaigns(daily)
       
-    } catch (error) {
-      console.error('Error loading data:', error)
-      setError('Failed to load campaign data')
-    } finally {
-      setIsLoading(false)
-    }
-  }
+      const campaign = campaignMap.get(row.campaign)
+      campaign.Cost += row.cost
+      campaign.ConvValue += row.value
+      campaign.Clicks += row.clicks
+      campaign.Conversions += row.conv
+      campaign.Impressions += row.impr
+    })
 
-  // Replace or add this useEffect
-  useEffect(() => {
-    loadData()
-  }, [])
+    return Array.from(campaignMap.values())
+  }, [data])
 
-  // Update cost and revenue when campaign changes
+  // Set initial campaign when data loads
   useEffect(() => {
-    const campaign = campaigns.find(c => c.Campaign === selectedCampaign)
-    if (campaign) {
-      setCost(campaign.Cost)
-      setConvValue(campaign.ConvValue)
+    if (campaigns.length > 0 && !selectedCampaign) {
+      setSelectedCampaign(campaigns[0].Campaign)
+      setCost(campaigns[0].Cost)
+      setConvValue(campaigns[0].ConvValue)
     }
-  }, [selectedCampaign, campaigns])
+  }, [campaigns, selectedCampaign])
+
+  // Debug logging
+  useEffect(() => {
+    console.log("Loading state:", isLoading)
+    console.log("Campaigns:", campaigns)
+    console.log("Selected Campaign:", selectedCampaign)
+    console.log("Error:", error)
+  }, [isLoading, campaigns, selectedCampaign, error])
 
   // Calculate current metrics
   const currentMetrics = useMemo((): ProfitMetrics => {
@@ -842,39 +833,6 @@ export default function Profit() {
         bValue - aValue;
     });
   };
-
-  // Add debug output to render
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-lg">Loading campaign data...</div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-lg text-red-500">
-          {error}
-          <pre className="mt-4 text-sm">
-            Loading: {isLoading.toString()}
-            Campaigns: {campaigns.length}
-            Selected: {selectedCampaign}
-          </pre>
-        </div>
-      </div>
-    );
-  }
-
-  // Early return if no campaigns loaded
-  if (!campaigns.length) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-lg">No campaign data available</div>
-      </div>
-    )
-  }
 
   return (
     <>
