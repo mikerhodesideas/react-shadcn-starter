@@ -15,15 +15,17 @@ export default function Header() {
                         </span>
                     </Link>
                     <nav className="flex items-center space-x-6 text-sm font-medium">
-                        {mainNav.map((item) => (
-                            <Link
-                                key={item.title}
-                                to={item.href}
-                                className="transition-colors hover:text-foreground/80 text-foreground/60"
-                            >
-                                {item.title}
-                            </Link>
-                        ))}
+                        {mainNav
+                            .filter(item => !item.hidden)
+                            .map((item) => (
+                                <Link
+                                    key={item.title}
+                                    to={item.href}
+                                    className="transition-colors hover:text-foreground/80 text-foreground/60"
+                                >
+                                    {item.title}
+                                </Link>
+                            ))}
                     </nav>
                 </div>
                 <ModeToggle />

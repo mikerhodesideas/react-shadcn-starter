@@ -1,108 +1,230 @@
+// src/pages/index.tsx
 'use client'
 
-import { useState, useEffect } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui"
-import { Button } from "@/components/ui"
-import { Input } from "@/components/ui"
+import { useEffect, useState } from "react"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { useToast } from "@/components/ui/use-toast"
+import { Progress } from "@/components/ui/progress"
 import { GOOGLE_SHEET_URL } from "@/lib/constants"
-import { DataService } from "@/services/data-service"
-import { Loader2 } from "lucide-react"
-import { type SheetData } from "@/types/metrics"
+import { DataService } from '@/services/data-service'
+import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react"
+import { useCampaignData } from "@/contexts/campaign-data"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+
+// Define available data sources with descriptions
+const DATA_SOURCES = {
+  daily: {
+    title: 'Daily Data',
+    description: 'Daily campaign performance metrics'
+  },
+  thirty_days: {
+    title: '30 Day Data',
+    description: 'Aggregated 30-day campaign performance'
+  },
+  hourly_today: {
+    title: 'Today\'s Hourly',
+    description: 'Hour-by-hour performance for today'
+  },
+  hourly_yesterday: {
+    title: 'Yesterday\'s Hourly',
+    description: 'Hour-by-hour performance for yesterday'
+  },
+  settings: {
+    title: 'Campaign Settings',
+    description: 'Campaign configuration and bid strategies'
+  },
+  products: {
+    title: 'Product Data',
+    description: 'Product-level performance metrics'
+  },
+  match_types: {
+    title: 'Match Types',
+    description: 'Performance by keyword match type'
+  },
+  search_terms: {
+    title: 'Search Terms',
+    description: 'Search query performance data'
+  },
+  channels: {
+    title: 'Channels',
+    description: 'Performance by advertising channel'
+  },
+  pmax: {
+    title: 'Performance Max',
+    description: 'Performance Max campaign data'
+  }
+} as const
+
+type TabKey = keyof typeof DATA_SOURCES
+
+interface FetchStatus {
+  isLoading: boolean
+  error?: string
+  rowCount?: number
+  lastUpdated?: string
+}
 
 export default function Settings() {
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [sheetUrl, setSheetUrl] = useState(GOOGLE_SHEET_URL)
-  const [data, setData] = useState<SheetData[]>([])
+  const [progress, setProgress] = useState(0)
+  const [fetchStatus, setFetchStatus] = useState<Record<TabKey, FetchStatus>>({} as Record<TabKey, FetchStatus>)
+  const { refreshData, lastUpdated } = useCampaignData()
   const { toast } = useToast()
 
-  const fetchSheetData = async () => {
-    console.log("Fetching data from:", sheetUrl)
-    
-    if (!sheetUrl) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Please enter a Google Sheets Web App URL",
-      })
-      return
-    }
+  // Helper function to format timestamp
+  const formatTimestamp = (timestamp: string) => {
+    const date = new Date(timestamp)
+    return date.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    })
+  }
 
-    setIsLoading(true)
+  useEffect(() => {
+    const cachedData = DataService.loadData()
+    if (cachedData) {
+      // Update fetch status for each data type that exists in cache
+      const newFetchStatus: Record<TabKey, FetchStatus> = {} as Record<TabKey, FetchStatus>
+      Object.entries(DATA_SOURCES).forEach(([tab, _]) => {
+        const tabKey = tab as TabKey
+        const tabData = cachedData[tabKey]
+        newFetchStatus[tabKey] = {
+          isLoading: false,
+          rowCount: Array.isArray(tabData) ? tabData.length : 0,
+          lastUpdated: cachedData.timestamp
+        }
+      })
+      setFetchStatus(newFetchStatus)
+
+      // Auto-refresh if data is stale
+      if (DataService.isDataStale()) {
+        console.log('Data is stale, auto-refreshing...')
+        fetchAllData()
+      }
+    }
+  }, []) // Empty dependency array means this runs once on mount
+
+  const fetchTab = async (tab: string) => {
+    setFetchStatus(prev => ({
+      ...prev,
+      [tab]: { isLoading: true }
+    }))
+
+    const url = `${GOOGLE_SHEET_URL}?tab=${tab}`
+    console.log(`Fetching ${tab} data from:`, url)
+
     try {
-      const response = await fetch(sheetUrl)
-      console.log("Response status:", response.status)
-      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json'
+        }
+      })
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
-      
-      const jsonData = await response.json()
-      console.log("Raw data received:", jsonData)
-      
-      // Validate and transform data
-      if (!Array.isArray(jsonData)) {
-        throw new Error('Invalid data format: Expected an array')
-      }
 
-      // Store data in localStorage with timestamp
-      const storageData = {
-        timestamp: new Date().toISOString(),
-        data: jsonData
-      }
-      localStorage.setItem('campaignData', JSON.stringify(storageData))
-      console.log("Data stored in localStorage")
+      const data = await response.json()
 
-      setData(jsonData)
-      toast({
-        title: "Success",
-        description: `Loaded ${jsonData.length} rows of data`,
-      })
+      setFetchStatus(prev => ({
+        ...prev,
+        [tab]: {
+          isLoading: false,
+          rowCount: Array.isArray(data) ? data.length : 0
+        }
+      }))
 
-      // Log sample data for debugging
-      console.log("Sample data (first 3 rows):", jsonData.slice(0, 3))
-      console.log("Data structure of first row:", Object.keys(jsonData[0]))
-      
+      return data
     } catch (error) {
-      console.error('Error fetching data:', error)
-      toast({
-        variant: "destructive",
-        title: "Error fetching data",
-        description: error instanceof Error ? error.message : "Failed to fetch data",
-      })
-    } finally {
-      setIsLoading(false)
+      console.error(`Error fetching ${tab}:`, error)
+      setFetchStatus(prev => ({
+        ...prev,
+        [tab]: {
+          isLoading: false,
+          error: error instanceof Error ? error.message : 'Failed to fetch'
+        }
+      }))
+      throw error
     }
   }
 
-  // Check for cached data on component mount
-  useEffect(() => {
-    const cachedData = localStorage.getItem('campaignData')
-    if (cachedData) {
-      const { timestamp, data } = JSON.parse(cachedData)
-      const cacheAge = new Date().getTime() - new Date(timestamp).getTime()
-      const cacheAgeHours = cacheAge / (1000 * 60 * 60)
-      
-      console.log("Found cached data from:", timestamp)
-      console.log("Cache age (hours):", cacheAgeHours)
+  const fetchAllData = async () => {
+    setIsLoading(true)
+    setError(null)
+    setProgress(0)
 
-      // Use cached data if less than 24 hours old
-      if (cacheAgeHours < 24) {
-        console.log("Using cached data")
-        setData(data)
-      } else {
-        console.log("Cache expired, will need to fetch fresh data")
-        localStorage.removeItem('campaignData')
+    const totalTabs = Object.keys(DATA_SOURCES).length
+    let completedTabs = 0
+
+    try {
+      const existingData = DataService.loadData() || {}
+      const updatedData: Record<string, any> = { ...existingData }
+
+      for (const [tab, source] of Object.entries(DATA_SOURCES)) {
+        try {
+          const data = await fetchTab(tab)
+          if (data) {
+            updatedData[tab] = data
+          }
+          completedTabs++
+          setProgress((completedTabs / totalTabs) * 100)
+        } catch (error) {
+          console.error(`Error fetching ${tab}:`, error)
+        }
       }
+
+      if (Object.keys(updatedData).length > 0) {
+        updatedData.timestamp = new Date().toISOString()
+        DataService.saveData(updatedData)
+        refreshData()
+
+        toast({
+          title: "Data Updated",
+          description: "Campaign data has been successfully refreshed.",
+        })
+      } else {
+        throw new Error('No valid data received from any tab')
+      }
+    } catch (error) {
+      console.error('Error in fetch process:', error)
+      setError(error instanceof Error ? error.message : 'Failed to fetch data')
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error instanceof Error ? error.message : 'Failed to fetch data',
+      })
+    } finally {
+      setIsLoading(false)
+      setProgress(0)
     }
-  }, [])
+  }
 
   return (
     <div className="container mx-auto py-6">
-      <h1 className="text-2xl font-bold mb-6">Campaign Data Settings</h1>
-      <Card>
+      <h1 className="text-2xl font-bold mb-2">Campaign Data Settings</h1>
+      <div className="flex justify-between items-center mb-6">
+        <p className="text-sm text-muted-foreground">
+          {lastUpdated && `Last updated: ${new Date(lastUpdated).toLocaleString()}`}
+        </p>
+        <p className="text-sm text-muted-foreground">
+          Data automatically refreshes every 24 hours
+        </p>
+      </div>
+
+      <Card className="mb-8">
         <CardHeader>
           <CardTitle>Google Sheets Integration</CardTitle>
+          <CardDescription>
+            Update campaign data from all sources
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-col space-y-4">
@@ -115,68 +237,65 @@ export default function Settings() {
                 className="flex-1"
                 disabled={isLoading}
               />
-              <Button 
-                onClick={fetchSheetData}
+              <Button
+                onClick={fetchAllData}
                 disabled={isLoading}
               >
                 {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {isLoading ? 'Loading...' : 'Fetch Data'}
+                {isLoading ? 'Loading...' : 'Update All Data'}
               </Button>
             </div>
-
-            {data.length > 0 && (
-              <div className="mt-4">
-                <h3 className="text-sm font-medium mb-2">Preview (First 3 Rows):</h3>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        {Object.keys(data[0]).map((header) => (
-                          <th
-                            key={header}
-                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                          >
-                            {header}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {data.slice(0, 3).map((row, idx) => (
-                        <tr key={idx}>
-                          {Object.values(row).map((value, cellIdx) => (
-                            <td
-                              key={cellIdx}
-                              className="px-6 py-4 whitespace-nowrap text-sm text-gray-500"
-                            >
-                              {value?.toString()}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+            {isLoading && (
+              <Progress value={progress} className="w-full" />
             )}
           </div>
         </CardContent>
       </Card>
 
-      {data.length > 0 && (
-        <div className="mt-6">
-          <Card>
+      <div className="grid md:grid-cols-2 gap-4">
+        {Object.entries(DATA_SOURCES).map(([tab, source]) => (
+          <Card key={tab} className="relative">
+            {fetchStatus[tab]?.isLoading && (
+              <div className="absolute inset-0 bg-background/50 backdrop-blur-sm flex items-center justify-center">
+                <Loader2 className="h-6 w-6 animate-spin" />
+              </div>
+            )}
             <CardHeader>
-              <CardTitle>Data Status</CardTitle>
+              <CardTitle className="text-lg flex items-center gap-2">
+                {source.title}
+                {fetchStatus[tab]?.error ? (
+                  <AlertCircle className="h-5 w-5 text-destructive" />
+                ) : fetchStatus[tab]?.rowCount ? (
+                  <CheckCircle2 className="h-5 w-5 text-green-500" />
+                ) : null}
+              </CardTitle>
+              <CardDescription>{source.description}</CardDescription>
             </CardHeader>
             <CardContent>
-              <p>Total rows loaded: {data.length}</p>
-              <p>Last updated: {new Date().toLocaleString()}</p>
-              <p>Available metrics: {Object.keys(data[0]).join(', ')}</p>
+              {fetchStatus[tab]?.error ? (
+                <Alert variant="destructive">
+                  <AlertDescription>{fetchStatus[tab].error}</AlertDescription>
+                </Alert>
+              ) : fetchStatus[tab]?.rowCount ? (
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">
+                    {fetchStatus[tab].rowCount.toLocaleString()} rows loaded
+                  </p>
+                  {fetchStatus[tab].lastUpdated && (
+                    <p className="text-xs text-muted-foreground">
+                      Updated: {formatTimestamp(fetchStatus[tab].lastUpdated)}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {isLoading ? 'Loading...' : 'No data loaded'}
+                </p>
+              )}
             </CardContent>
           </Card>
-        </div>
-      )}
+        ))}
+      </div>
     </div>
   )
-} 
+}

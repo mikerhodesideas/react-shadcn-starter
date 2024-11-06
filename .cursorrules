@@ -1,55 +1,328 @@
+# Google Ads Performance Analysis App - Developer Guide
 
-    You are an expert full-stack developer proficient in TypeScript, React, Next.js, and modern UI/UX frameworks (e.g., Tailwind CSS, Shadcn UI, Radix UI). Your task is to produce the most optimized and maintainable Next.js code, following best practices and adhering to the principles of clean code and robust architecture.
+## Project Overview
+A React/TypeScript application for analyzing Google Ads campaign performance data. The app fetches data from Google Sheets (deployed as a web app) and provides various analysis views and optimization recommendations.
 
-    ### Objective
-    - Create a Next.js solution that is not only functional but also adheres to the best practices in performance, security, and maintainability.
+## Tech Stack
+- **Framework**: React + Vite
+- **Language**: TypeScript
+- **UI Components**: Shadcn UI (based on Radix UI)
+- **Styling**: Tailwind CSS
+- **Data Visualization**: Recharts
+- **Icons**: Lucide React
 
-    ### Code Style and Structure
-    - Write concise, technical TypeScript code with accurate examples.
-    - Use functional and declarative programming patterns; avoid classes.
-    - Favor iteration and modularization over code duplication.
-    - Use descriptive variable names with auxiliary verbs (e.g., `isLoading`, `hasError`).
-    - Structure files with exported components, subcomponents, helpers, static content, and types.
-    - Use lowercase with dashes for directory names (e.g., `components/auth-wizard`).
+## Project Structure
+```
+src/
+├── components/          # Reusable UI components
+│   └── ui/             # Shadcn UI components
+├── contexts/           # React contexts
+│   └── campaign-data.tsx   # Central data management
+├── lib/               # Utilities and constants
+│   ├── constants.ts   # Global constants and configs
+│   └── storage-utils.ts # Data persistence utilities
+├── pages/             # Page components
+│   ├── index.tsx      # Settings page (data fetching)
+│   ├── analysis.tsx   # Campaign analysis
+│   ├── trends.tsx     # Time-based visualizations
+│   └── debug.tsx      # Data inspection view
+├── services/          # Data services
+│   └── data-service.ts # Data handling and storage
+└── types/            # TypeScript type definitions
+    └── metrics.ts    # Data structure types
+```
 
-    ### Optimization and Best Practices
-    - Minimize the use of `'use client'`, `useEffect`, and `setState`; favor React Server Components (RSC) and Next.js SSR features.
-    - Implement dynamic imports for code splitting and optimization.
-    - Use responsive design with a mobile-first approach.
-    - Optimize images: use WebP format, include size data, implement lazy loading.
+## Data Architecture
+### Data Flow
+1. User triggers data fetch in Settings page
+2. Data is fetched from Google Sheets web app endpoints
+3. Data is stored in localStorage with timestamp
+4. CampaignDataProvider manages data access across app
+5. Components consume data via useCampaignData hook
 
-    ### Error Handling and Validation
-    - Prioritize error handling and edge cases:
-      - Use early returns for error conditions.
-      - Implement guard clauses to handle preconditions and invalid states early.
-      - Use custom error types for consistent error handling.
+### Data Sources
+We fetch data from multiple tabs:
+- Daily campaign performance
+- 30-day aggregated stats
+- Hourly data (today/yesterday)
+- Campaign settings
+- Product performance
+- Match types analysis
+- Search terms
+- Channel performance
+- Performance Max data
 
-    ### UI and Styling
-    - Use modern UI frameworks (e.g., Tailwind CSS, Shadcn UI, Radix UI) for styling.
-    - Implement consistent design and responsive patterns across platforms.
+See debug.tsx for all available data structures.
 
-    ### State Management and Data Fetching
-    - Use modern state management solutions (e.g., Zustand, TanStack React Query) to handle global state and data fetching.
-    - Implement validation using Zod for schema validation.
+## Development Guidelines
 
-    ### Security and Performance
-    - Implement proper error handling, user input validation, and secure coding practices.
-    - Follow performance optimization techniques, such as reducing load times and improving rendering efficiency.
+### State Management
+1. Use `useCampaignData` hook for accessing campaign data:
+```typescript
+const { dailyData, thirtyDayData, isLoading, error } = useCampaignData()
+```
 
-    ### Testing and Documentation
-    - Write unit tests for components using Jest and React Testing Library.
-    - Provide clear and concise comments for complex logic.
-    - Use JSDoc comments for functions and components to improve IDE intellisense.
+2. Implement data transformations in useMemo:
+```typescript
+const campaigns = useMemo(() => {
+  if (!thirtyDayData?.length) return []
+  // Transform data here
+}, [thirtyDayData])
+```
 
-    ### Methodology
-    1. **System 2 Thinking**: Approach the problem with analytical rigor. Break down the requirements into smaller, manageable parts and thoroughly consider each step before implementation.
-    2. **Tree of Thoughts**: Evaluate multiple possible solutions and their consequences. Use a structured approach to explore different paths and select the optimal one.
-    3. **Iterative Refinement**: Before finalizing the code, consider improvements, edge cases, and optimizations. Iterate through potential enhancements to ensure the final solution is robust.
+### Component Structure
+1. Early returns for loading/error states
+2. Type definitions at top of file
+3. Helper components after interfaces
+4. Main component with organized sections:
+   - State/hooks
+   - Data processing
+   - Event handlers
+   - Render methods
+   - Return JSX
 
-    **Process**:
-    1. **Deep Dive Analysis**: Begin by conducting a thorough analysis of the task at hand, considering the technical requirements and constraints.
-    2. **Planning**: Develop a clear plan that outlines the architectural structure and flow of the solution, using <PLANNING> tags if necessary.
-    3. **Implementation**: Implement the solution step-by-step, ensuring that each part adheres to the specified best practices.
-    4. **Review and Optimize**: Perform a review of the code, looking for areas of potential optimization and improvement.
-    5. **Finalization**: Finalize the code by ensuring it meets all requirements, is secure, and is performant.
-    
+Example:
+```typescript
+// Types
+interface ComponentProps { ... }
+
+// Helper components
+const SubComponent = ({ ... }) => { ... }
+
+// Main component
+export default function MainComponent() {
+  // 1. Hooks and state
+  const { data, isLoading } = useCampaignData()
+  const [state, setState] = useState()
+
+  // 2. Data processing
+  const processed = useMemo(() => { ... }, [data])
+
+  // 3. Event handlers
+  const handleEvent = () => { ... }
+
+  // 4. Early returns
+  if (isLoading) return <Loading />
+
+  // 5. Render methods
+  const renderSection = () => { ... }
+
+  // 6. Component JSX
+  return ( ... )
+}
+```
+
+### Styling Conventions
+1. Use Tailwind classes
+2. Follow mobile-first approach
+3. Use Shadcn UI components where possible
+4. Maintain dark mode compatibility
+
+### Performance Considerations
+1. Use useMemo for expensive calculations
+2. Implement proper data fetching error handling
+3. Handle loading and error states consistently
+4. Cache data appropriately (24hr default)
+
+### Type Safety
+1. Use TypeScript interfaces for all data structures
+2. Define proper return types for functions
+3. Avoid any where possible
+4. Use type inference when clear
+
+### Best Practices
+1. Add console.logs for debugging (will be removed in production)
+2. Use early returns for error conditions
+3. Keep components focused and modular
+4. Use proper error boundaries
+5. Follow existing patterns in the codebase
+
+### Common Patterns
+1. Data fetching:
+```typescript
+const fetchData = async () => {
+  setIsLoading(true)
+  try {
+    // Fetch and process data
+  } catch (error) {
+    handleError(error)
+  } finally {
+    setIsLoading(false)
+  }
+}
+```
+
+2. Data processing:
+```typescript
+const processData = useMemo(() => {
+  if (!data?.length) return []
+  
+  return data
+    .filter(/* conditions */)
+    .map(/* transformations */)
+    .sort(/* ordering */)
+}, [data])
+```
+
+3. Error handling:
+```typescript
+if (error) {
+  return <div>Error: {error}</div>
+}
+
+if (!data?.length) {
+  return <div>No data available</div>
+}
+```
+
+## Getting Started
+1. Clone repository
+2. Install dependencies: `npm install`
+3. Start dev server: `npm run dev`
+4. Open debug view to inspect data structure
+5. Review existing components for patterns
+
+## Debugging
+1. Use debug.tsx page to inspect data
+2. Check console for detailed logging
+3. Verify data freshness with timestamps
+4. Test edge cases and error states
+
+## Common Tasks
+1. Adding new analysis view:
+   - Create new page in pages/
+   - Use useCampaignData hook
+   - Follow existing component patterns
+   - Add to navigation
+
+2. Modifying data processing:
+   - Update types in metrics.ts
+   - Modify data-service.ts
+   - Update context if needed
+   - Test in debug view
+
+3. Adding new visualization:
+   - Use Recharts library
+   - Follow existing chart patterns
+   - Handle loading/error states
+   - Consider performance
+
+## Resources
+- Shadcn UI docs: [link]
+- Recharts docs: [link]
+- Tailwind docs: [link]
+- Google Sheets API docs: [link]
+
+
+
+# Campaign Data Access Guide
+
+## Data Structure
+The application fetches data from multiple Google Sheets tabs, each providing different views of campaign performance data.
+
+### Time-Based Data
+1. **Daily Data** (`dailyData`)
+   - Segmented by day and campaign
+   - Fields: Date, Campaign, CampaignId, Conversions, Clicks, Cost, ConvValue, Impressions, LostToBudget, ImprShare, LostToRank
+   - Example: Use for trend analysis and daily performance tracking
+
+2. **Thirty Day Data** (`thirtyDayData`)
+   - Aggregated campaign performance over 30 days
+   - Same fields as daily but without Date
+   - Example: Use for overall campaign analysis and optimization recommendations
+
+3. **Hourly Data** (`hourlyTodayData`, `hourlyYesterdayData`)
+   - Segmented by hour and campaign
+   - Fields: Hour (0-23), Campaign, CampaignId, Conversions, Clicks, Cost, ConvValue, Impressions, LostToBudget, ImprShare, LostToRank
+   - Example: Use for intraday analysis and dayparting optimization
+
+### Dimension Data
+1. **Settings** (`settings`)
+   - Campaign configuration data
+   - Fields: BidStrategy, BidStatus, BidType, Budget, Group, Channel, SubChannel, OptStatus, CampaignId, Labels, Campaign, TargetCPA, TargetROAS, MaxCPC, RTBOptIn, StatusReasons, PrimaryStatus, ServingStatus, Status, OptOutURLExp
+   - Example: Use for campaign setup analysis and bid strategy optimization
+
+2. **Products** (`products`)
+   - Product-level performance data
+   - Fields: ProductId, ProductTitle, Impressions, Clicks, Cost, Conversions, ConvValue
+   - Example: Use for product-specific performance analysis
+
+3. **Match Types** (`matchTypes`)
+   - Keyword match type performance
+   - Fields: KeywordMatchType, Impressions, Clicks, Cost, Conversions, ConvValue
+   - Example: Use for keyword strategy optimization
+
+4. **Search Terms** (`searchTerms`)
+   - Search query performance data
+   - Fields: SearchTerm, Impressions, Clicks, Cost, Conversions, ConvValue
+   - Example: Use for search term analysis and negative keyword identification
+
+5. **Channels** (`channels`)
+   - Channel-level performance data
+   - Fields: Channel, Impressions, Cost, Conversions, ConvValue
+   - Example: Use for channel mix analysis
+
+6. **Performance Max** (`pmax`)
+   - Performance Max campaign data
+   - Fields: Date, Impressions, Cost, Conversions, ConvValue
+   - Example: Use for Performance Max campaign analysis
+
+## Accessing Data
+### Using the Campaign Data Context
+```typescript
+const { 
+  dailyData,
+  thirtyDayData,
+  hourlyTodayData,
+  hourlyYesterdayData,
+  settings,
+  products,
+  matchTypes,
+  searchTerms,
+  channels,
+  pmax,
+  isLoading,
+  error,
+  lastUpdated
+} = useCampaignData()
+```
+
+### Best Practices
+1. Always check isLoading and error states before using data
+2. Use proper typing for data structures (see types/metrics.ts)
+3. Access debug view (/debug) to verify data loading
+4. Check lastUpdated to ensure data freshness
+
+### Common Use Cases
+1. Trend Analysis:
+   ```typescript
+   const trends = useMemo(() => {
+     return dailyData?.filter(row => row.Campaign === selectedCampaign)
+   }, [dailyData, selectedCampaign])
+   ```
+
+2. Campaign Performance:
+   ```typescript
+   const campaignMetrics = useMemo(() => {
+     return thirtyDayData?.find(row => row.Campaign === selectedCampaign)
+   }, [thirtyDayData, selectedCampaign])
+   ```
+
+3. Settings Lookup:
+   ```typescript
+   const campaignSettings = useMemo(() => {
+     return settings?.find(row => row.CampaignId === selectedId)
+   }, [settings, selectedId])
+   ```
+
+### Data Update Process
+1. Data is fetched from Google Sheets via web app endpoint
+2. Each tab is fetched separately using ?tab= parameter
+3. Data is stored in localStorage with timestamp
+4. Context provider manages data access and state
+5. Cache duration is 24 hours (configurable in constants.ts)
+
+### URLs and Endpoints
+- Base URL: {GOOGLE_SHEET_URL}
+- Tab Access: `${GOOGLE_SHEET_URL}?tab=${tabName}`
+- Available tabs: daily, thirty_days, hourly_today, hourly_yesterday, settings, products, match_types, search_terms, channels, pmax

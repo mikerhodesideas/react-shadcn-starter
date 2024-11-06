@@ -30,6 +30,11 @@ export const mainNav = [
     {
         title: "Settings",
         href: "/settings",
+    },
+    {
+        title: "Debug",
+        href: "/debug",
+        hidden: process.env.NODE_ENV === "production"
     }
 ];
 

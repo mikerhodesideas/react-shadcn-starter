@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/collapsible"
 import { ChevronDown, ChevronUp } from "lucide-react" // For the toggle icon
 import { useCampaignData } from "@/contexts/campaign-data"
-import { useSafeCampaignData } from "@/hooks/use-safe-campaign-data"
+import { STORAGE_KEYS } from '@/lib/constants'
 
 interface CampaignData {
   Campaign: string;
@@ -170,11 +170,7 @@ const SortableHeader = ({
   </th>
 );
 
-// Add a constant for the localStorage key
-const ROW_LIMIT_KEY = 'campaign_row_limit';
-
 export default function Analysis() {
-  console.log('Rendering Analysis component')
   const { thirtyDayData, isLoading, error } = useCampaignData()
   console.log('Campaign data context:', { thirtyDayData, isLoading, error })
 
@@ -191,62 +187,81 @@ export default function Analysis() {
     return <div>No campaign data available. Please load data in Settings.</div>
   }
 
-  const context = useCampaignData()
-  console.log('Campaign data context:', context)
-  const { thirtyDayData: data, isLoading, error } = useCampaignData()
   const [selectedCampaign, setSelectedCampaign] = useState<string>('')
   const [cost, setCost] = useState(0)
   const [convValue, setConvValue] = useState(0)
   const [cogsPercentage, setCogsPercentage] = useState(50)
   const [activeChart, setActiveChart] = useState<ChartType>('profit-curve')
+  const [includeFilter, setIncludeFilter] = useState('')
+const [excludeFilter, setExcludeFilter] = useState('')
+const [rowLimit, setRowLimit] = useState(() => {
+  const saved = localStorage.getItem(STORAGE_KEYS.ROW_LIMIT)
+  return saved ? parseInt(saved, 10) : 10
+})
+const [sortState, setSortState] = useState<SortState>({
+  field: 'cost',
+  direction: 'desc'
+})
+const [projectionsSortState, setProjectionsSortState] = useState<SortState>({
+  field: 'currentCost',
+  direction: 'desc'
+})
+const [optimalZone, setOptimalZone] = useState<OptimalZone>({
+  start: 0,
+  end: 0,
+  current: 0,
+  maxProfit: 0
+})
 
-  // Optimal zone state
-  const [optimalZone, setOptimalZone] = useState({
-    start: 0,
-    end: 0,
-    current: 0,
-    maxProfit: 0
+// Add effect to save rowLimit changes
+useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.ROW_LIMIT, rowLimit.toString())
+  }, [rowLimit])
+
+  // Debug logging (optional)
+  useEffect(() => {
+    console.log("Loading state:", isLoading)
+    console.log("Data:", thirtyDayData)
+    console.log("Error:", error)
+  }, [isLoading, thirtyDayData, error])
+
+// Get unique campaigns and their metrics
+const campaigns = useMemo(() => {
+  if (!thirtyDayData?.length) return []
+  
+  const campaignMap = new Map()
+  thirtyDayData.forEach(row => {
+    if (!row.Campaign) return  // Skip rows without campaign name
+    
+    if (!campaignMap.has(row.Campaign)) {
+      campaignMap.set(row.Campaign, {
+        Campaign: row.Campaign,
+        Cost: row.Cost || 0,
+        ConvValue: row.ConvValue || 0,
+        Clicks: row.Clicks || 0,
+        Conversions: row.Conversions || 0,
+        ImprShare: row.ImprShare || 0,
+        LostToBudget: row.LostToBudget || 0,
+        LostToRank: row.LostToRank || 0,
+        Impressions: row.Impressions || 0
+      })
+    } else {
+      // For already existing campaigns, update the values
+      const campaign = campaignMap.get(row.Campaign)
+      campaign.Cost += row.Cost || 0
+      campaign.ConvValue += row.ConvValue || 0
+      campaign.Clicks += row.Clicks || 0
+      campaign.Conversions += row.Conversions || 0
+      campaign.Impressions += row.Impressions || 0
+      // Take the most recent impression share data
+      campaign.ImprShare = row.ImprShare || campaign.ImprShare
+      campaign.LostToBudget = row.LostToBudget || campaign.LostToBudget
+      campaign.LostToRank = row.LostToRank || campaign.LostToRank
+    }
   })
 
-  // Filter state
-  const [includeFilter, setIncludeFilter] = useState('')
-  const [excludeFilter, setExcludeFilter] = useState('')
-  const [rowLimit, setRowLimit] = useState(10)
-
-  // Sort state with proper types
-  const [sortState, setSortState] = useState<SortState>({ field: 'profit', direction: 'desc' })
-  const [projectionsSortState, setProjectionsSortState] = useState<SortState>({ field: 'profitChange', direction: 'desc' })
-
-  // Get unique campaigns and their metrics
-  const campaigns = useMemo(() => {
-    if (!data?.length) return []
-    
-    const campaignMap = new Map()
-    data.forEach(row => {
-      if (!campaignMap.has(row.campaign)) {
-        campaignMap.set(row.campaign, {
-          Campaign: row.campaign,
-          Cost: 0,
-          ConvValue: 0,
-          Clicks: 0,
-          Conversions: 0,
-          ImprShare: 0,
-          LostToBudget: 0,
-          LostToRank: 0,
-          Impressions: 0
-        })
-      }
-      
-      const campaign = campaignMap.get(row.campaign)
-      campaign.Cost += row.cost
-      campaign.ConvValue += row.value
-      campaign.Clicks += row.clicks
-      campaign.Conversions += row.conv
-      campaign.Impressions += row.impr
-    })
-
-    return Array.from(campaignMap.values())
-  }, [data])
+  return Array.from(campaignMap.values())
+}, [thirtyDayData])
 
   // Set initial campaign when data loads
   useEffect(() => {
@@ -260,10 +275,11 @@ export default function Analysis() {
   // Debug logging
   useEffect(() => {
     console.log("Loading state:", isLoading)
+    console.log("Thirty Day Data:", thirtyDayData)
     console.log("Campaigns:", campaigns)
     console.log("Selected Campaign:", selectedCampaign)
     console.log("Error:", error)
-  }, [isLoading, campaigns, selectedCampaign, error])
+  }, [isLoading, thirtyDayData, campaigns, selectedCampaign, error])
 
   // Calculate current metrics
   const currentMetrics = useMemo((): ProfitMetrics => {
@@ -487,13 +503,17 @@ export default function Analysis() {
   };
 
   const campaignSummaries = useMemo((): CampaignSummary[] => {
+    if (!campaigns?.length) return []
+  
     return campaigns.map(campaign => {
-      const revenue = campaign.ConvValue;
-      const cost = campaign.Cost;
+      if (!campaign?.Campaign) return null
+  
+      const revenue = campaign.ConvValue || 0;
+      const cost = campaign.Cost || 0;
       const grossRevenue = revenue * (1 - cogsPercentage / 100);
       const profit = grossRevenue - cost;
-      const roas = revenue / cost;
-
+      const roas = cost > 0 ? revenue / cost : 0;
+  
       // Calculate optimal range for this campaign
       const data = calculateProfitData(campaign);
       const maxProfitPoint = data.reduce((max, point) => 
@@ -503,16 +523,16 @@ export default function Analysis() {
       const profitRange = data.filter(point => point.profit >= profitThreshold);
       const minCost = Math.min(...profitRange.map(p => p.cost));
       const maxCost = Math.max(...profitRange.map(p => p.cost));
-
+  
       // Ignore lost budget IS if less than 5%
       const significantLostBudget = campaign.LostToBudget > 0.05 ? campaign.LostToBudget : 0;
       const lostBudgetDollars = significantLostBudget > 0 ? 
         (significantLostBudget / campaign.ImprShare) * campaign.Cost : 0;
-
-      // Determine recommendation based on both profit and impression share
+  
+      // Determine recommendation
       let recommendation: 'increase' | 'decrease' | 'optimal';
       let recommendationDetail: string;
-
+  
       if (cost < minCost && significantLostBudget > 0) {
         recommendation = 'increase';
         recommendationDetail = `Increase spend to capture $${Math.round(lostBudgetDollars).toLocaleString()} in lost budget impression share. Current ROAS is ${roas.toFixed(1)}x.`;
@@ -529,7 +549,7 @@ export default function Analysis() {
         recommendation = 'optimal';
         recommendationDetail = `Current spend is within optimal range. ROAS is ${roas.toFixed(1)}x and profit is $${Math.round(profit).toLocaleString()}.`;
       }
-
+  
       return {
         name: campaign.Campaign,
         cost,
@@ -541,7 +561,7 @@ export default function Analysis() {
         recommendation,
         recommendationDetail
       };
-    });
+    }).filter(Boolean) as CampaignSummary[];  // Remove any null entries
   }, [campaigns, cogsPercentage]);
 
   // Add projection size type and state
@@ -550,15 +570,14 @@ export default function Analysis() {
 
   // Add filter logic to campaignSummaries FIRST
   const filteredCampaignSummaries = useMemo(() => {
+    if (!campaignSummaries?.length) return [];
+  
     return campaignSummaries.filter(summary => {
-      const name = summary.name.toLowerCase();
-      const include = includeFilter.toLowerCase();
-      const exclude = excludeFilter.toLowerCase();
+      const name = summary.name?.toLowerCase() || '';
+      const include = includeFilter?.toLowerCase() || '';
+      const exclude = excludeFilter?.toLowerCase() || '';
       
-      // If include filter is set, campaign must contain it
       if (include && !name.includes(include)) return false;
-      
-      // If exclude filter is set, campaign must not contain it
       if (exclude && name.includes(exclude)) return false;
       
       return true;

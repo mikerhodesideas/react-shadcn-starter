@@ -1,3 +1,5 @@
+// src/types/metrics.d.ts
+
 export interface Metrics {
   impr: number
   clicks: number

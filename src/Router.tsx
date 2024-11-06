@@ -4,6 +4,7 @@ import Analysis from "@/pages/analysis";
 import Trends from "@/pages/trends";
 import Curve from "@/pages/curve";
 import Settings from "@/pages/index";
+import Debug from "@/pages/debug";
 import ErrorBoundary from "./ErrorBoundart";
 
 export const router = createBrowserRouter([
@@ -30,6 +31,11 @@ export const router = createBrowserRouter([
             {
                 path: "curve",
                 element: <Curve />,
+                errorElement: <ErrorBoundary />,
+            },
+            {
+                path: "debug",
+                element: <Debug />,
                 errorElement: <ErrorBoundary />,
             }
         ],

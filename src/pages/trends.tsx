@@ -1,15 +1,15 @@
+// src/pages/trends.tsx
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Line, LineChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend } from "recharts"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Loader2 } from "lucide-react"
 import { useCampaignData } from "@/contexts/campaign-data"
+import type { DailyData } from '@/types/metrics'
 
 interface Metric {
-  key: 'impr' | 'clicks' | 'cost' | 'conv' | 'value'
+  key: keyof Pick<DailyData, 'Impressions' | 'Clicks' | 'Cost' | 'Conversions' | 'ConvValue'>
   label: string
   format: (value: number) => string
   color: string
@@ -17,31 +17,31 @@ interface Metric {
 
 const metrics: Metric[] = [
   { 
-    key: 'impr', 
+    key: 'Impressions', 
     label: 'Impressions', 
     format: (v) => Math.round(v).toLocaleString(),
     color: '#f97316'
   },
   { 
-    key: 'clicks', 
+    key: 'Clicks', 
     label: 'Clicks', 
     format: (v) => Math.round(v).toLocaleString(),
     color: '#22c55e'
   },
   { 
-    key: 'cost', 
+    key: 'Cost', 
     label: 'Cost', 
     format: (v) => `€${v.toFixed(2)}`,
     color: '#0ea5e9'
   },
   { 
-    key: 'conv', 
+    key: 'Conversions', 
     label: 'Conversions', 
     format: (v) => v.toFixed(1),
     color: '#8b5cf6'
   },
   { 
-    key: 'value', 
+    key: 'ConvValue', 
     label: 'Value', 
     format: (v) => `€${v.toFixed(2)}`,
     color: '#ef4444'
@@ -49,15 +49,30 @@ const metrics: Metric[] = [
 ]
 
 export default function Trends() {
-  const { dailyData: data, isLoading, error } = useCampaignData()
-  
-  const campaigns = useMemo(() => {
-    if (!data?.length) return []
-    return Array.from(new Set(data.map(row => row.campaign)))
-  }, [data])
+  const { dailyData, isLoading, error } = useCampaignData()
+  console.log('Daily data:', dailyData)
 
+  // Early returns for data issues
+  if (isLoading) {
+    return <div>Loading campaign data...</div>
+  }
+
+  if (error) {
+    return <div>Error loading data: {error}</div>
+  }
+
+  if (!dailyData?.length) {
+    return <div>No daily data available. Please load data in Settings.</div>
+  }
+
+  // State declarations
   const [selectedCampaign, setSelectedCampaign] = useState<string>('')
   const [selectedMetrics, setSelectedMetrics] = useState<Metric['key'][]>([])
+
+  // Get unique campaigns
+  const campaigns = useMemo(() => {
+    return dailyData?.length ? Array.from(new Set(dailyData.map(row => row.Campaign))) : []
+  }, [dailyData])
 
   // Set first campaign as default when data loads
   useEffect(() => {
@@ -66,32 +81,19 @@ export default function Trends() {
     }
   }, [campaigns, selectedCampaign])
 
-  // Filter data for selected campaign
+  // Filter and format data
   const filteredData = useMemo(() => {
     if (!selectedCampaign) return []
-    return data.filter(row => row.campaign === selectedCampaign)
-  }, [data, selectedCampaign])
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <Alert variant="destructive">
-        <AlertDescription>{error}</AlertDescription>
-      </Alert>
-    )
-  }
+    
+    return dailyData
+      .filter(row => row.Campaign === selectedCampaign)
+      .sort((a, b) => new Date(a.Date).getTime() - new Date(b.Date).getTime())
+  }, [dailyData, selectedCampaign])
 
   // Calculate totals for scorecards
   const totals = useMemo(() => {
     return metrics.reduce((acc, metric) => {
-      acc[metric.key] = filteredData.reduce((sum, row) => sum + row[metric.key], 0)
+      acc[metric.key] = filteredData.reduce((sum, row) => sum + (row[metric.key] || 0), 0)
       return acc
     }, {} as Record<Metric['key'], number>)
   }, [filteredData])
@@ -110,6 +112,11 @@ export default function Trends() {
 
   return (
     <div className="space-y-6">
+      {/* Debug info */}
+      <div className="text-sm text-muted-foreground">
+          Dates available: {Array.from(new Set(filteredData.map(d => d.date))).join(', ')}
+      </div>
+        
       {/* Campaign Selector */}
       <Card>
         <CardContent className="pt-6">
@@ -161,10 +168,12 @@ export default function Trends() {
                   angle={-45}
                   textAnchor="end"
                   height={60}
-                  tickFormatter={(value) => new Date(value).toLocaleDateString()}
+                  tickFormatter={(value) => {
+                    const date = new Date(value)
+                    return `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}`
+                  }}
                 />
                 
-                {/* Left Y-Axis */}
                 {selectedMetrics[0] && (
                   <YAxis
                     yAxisId="left"
@@ -175,7 +184,6 @@ export default function Trends() {
                   />
                 )}
                 
-                {/* Right Y-Axis */}
                 {selectedMetrics[1] && (
                   <YAxis
                     yAxisId="right"
@@ -192,7 +200,14 @@ export default function Trends() {
                     const metric = metrics.find(m => m.key === name)
                     return [metric?.format(value) || value, metric?.label || name]
                   }}
-                  labelFormatter={(label) => new Date(label).toLocaleDateString()}
+                  labelFormatter={(label) => {
+                    const date = new Date(label)
+                    return date.toLocaleDateString('en-GB', {
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric'
+                    })
+                  }}
                 />
                 
                 <Legend />
@@ -219,4 +234,4 @@ export default function Trends() {
       </Card>
     </div>
   )
-} 
+}
