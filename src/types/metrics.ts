@@ -35,6 +35,18 @@ export interface ThirtyDayData extends CampaignTimeData {
   // Same as CampaignTimeData but without date
 }
 
+export interface PreviousThirtyDayData extends CampaignTimeData {
+  // Same structure as ThirtyDayData for comparison
+}
+
+export interface SevenDayData extends CampaignTimeData {
+  // Same structure as ThirtyDayData but for 7-day period
+}
+
+export interface PreviousSevenDayData extends CampaignTimeData {
+  // Same structure as SevenDayData but for previous period
+}
+
 export interface CampaignSettings {
   BidStrategy: string;
   BidStatus: string;
@@ -86,6 +98,9 @@ export interface StorageData {
   hourly_today: HourlyData[];
   hourly_yesterday: HourlyData[];
   thirty_days: ThirtyDayData[];
+  previous_thirty_days: PreviousThirtyDayData[];
+  seven_days: SevenDayData[];
+  previous_seven_days: PreviousSevenDayData[];
   settings: CampaignSettings[];
   products: ProductData[];
   match_types: MatchTypeData[];

@@ -1,4 +1,3 @@
-// src/pages/settings.tsx
 'use client'
 
 import { useEffect, useState } from "react"
@@ -10,11 +9,12 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/components/ui/use-toast"
 import { Progress } from "@/components/ui/progress"
-import { GOOGLE_SHEET_URL, STORAGE_KEYS } from "@/lib/constants"
+import { GOOGLE_SHEET_URL, STORAGE_KEYS, DATA_SOURCES } from "@/lib/constants"
 import { useCampaignStorage } from '@/services/data-service'
 import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react"
-import { DATA_SOURCES, TabKey } from "@/lib/constants"
+import { TabKey } from "@/lib/constants"
 import { useCampaignData } from "@/contexts/campaign-data"
+import { StorageData } from "@/types/metrics"
 
 interface FetchStatusType {
   isLoading: boolean;
@@ -23,18 +23,23 @@ interface FetchStatusType {
   lastUpdated?: string;
 }
 
-// In settings.tsx
+const isDataStale = (lastUpdated: Date | null): boolean => {
+  if (!lastUpdated) return true;
+  const now = new Date();
+  const diff = now.getTime() - lastUpdated.getTime();
+  return diff > 24 * 60 * 60 * 1000;
+};
+
 export default function Settings() {
   const navigate = useNavigate();
-  const [isSetupComplete, setIsSetupComplete] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sheetUrl, setSheetUrl] = useState(GOOGLE_SHEET_URL);
   const [progress, setProgress] = useState(0);
 
-  // Initialize fetchStatus with all sources
+  // Initialize fetchStatus with all sources from DATA_SOURCES
   const [fetchStatus, setFetchStatus] = useState<Record<TabKey, FetchStatusType>>(() => 
-    Object.entries(DATA_SOURCES).reduce((acc, [tab]) => ({
+    Object.keys(DATA_SOURCES).reduce((acc, tab) => ({
       ...acc,
       [tab]: {
         isLoading: false,
@@ -44,9 +49,9 @@ export default function Settings() {
     }), {} as Record<TabKey, FetchStatusType>)
   );
   
-  // Get everything we need from context
-  const { data, refreshData, lastUpdated, isStale } = useCampaignData();
+  const { data, refreshData, lastUpdated } = useCampaignData();
   const { toast } = useToast();
+  const { saveData } = useCampaignStorage();
 
   // Update fetchStatus when data changes
   useEffect(() => {
@@ -55,26 +60,28 @@ export default function Settings() {
       
       Object.keys(DATA_SOURCES).forEach((tab) => {
         const tabKey = tab as TabKey;
+        const tabData = data[tabKey as keyof typeof data];
+        
         updatedFetchStatus[tabKey] = {
           isLoading: false,
-          rowCount: data[tabKey]?.length || 0,
-          lastUpdated: data.timestamp || null
+          rowCount: Array.isArray(tabData) ? tabData.length : 0,
+          lastUpdated: data.timestamp
         };
       });
       
       setFetchStatus(updatedFetchStatus);
 
-      if (isStale) {
+      if (isDataStale(lastUpdated)) {
         console.log('Data is stale, auto-refreshing...');
         fetchAllData();
       }
     }
-  }, [data]);
+  }, [data, lastUpdated]);
 
-  const fetchTab = async (tab: string) => {
+  const fetchTab = async (tab: string): Promise<any[] | null> => {
     setFetchStatus(prev => ({
       ...prev,
-      [tab]: { isLoading: true }
+      [tab]: { ...prev[tab as TabKey], isLoading: true }
     }));
 
     const url = `${sheetUrl}?tab=${tab}`;
@@ -92,27 +99,34 @@ export default function Settings() {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const data = await response.json();
+      const responseData = await response.json();
+      
+      // Validate that we received an array
+      if (!Array.isArray(responseData)) {
+        throw new Error(`Invalid data format for ${tab}`);
+      }
 
       setFetchStatus(prev => ({
         ...prev,
         [tab]: {
           isLoading: false,
-          rowCount: Array.isArray(data) ? data.length : 0
+          rowCount: responseData.length,
+          lastUpdated: new Date().toISOString()
         }
       }));
 
-      return data;
+      return responseData;
     } catch (error) {
       console.error(`Error fetching ${tab}:`, error);
       setFetchStatus(prev => ({
         ...prev,
         [tab]: {
+          ...prev[tab as TabKey],
           isLoading: false,
           error: error instanceof Error ? error.message : 'Failed to fetch'
         }
       }));
-      throw error;
+      return null;
     }
   };
 
@@ -121,41 +135,54 @@ export default function Settings() {
     setError(null);
     setProgress(0);
 
+    console.log('Available DATA_SOURCES:', Object.keys(DATA_SOURCES));
+
     const totalTabs = Object.keys(DATA_SOURCES).length;
     let completedTabs = 0;
+    let hasErrors = false;
 
     try {
-      const updatedData: Record<string, any> = { ...data } || {};
+      const updatedData: Partial<StorageData> = {
+        timestamp: new Date().toISOString()
+      };
 
       for (const [tab, source] of Object.entries(DATA_SOURCES)) {
         try {
+          console.log(`Attempting to fetch ${tab} data...`);
           const tabData = await fetchTab(tab);
           if (tabData) {
-            updatedData[tab] = tabData;
+            (updatedData[tab as keyof StorageData] as any) = tabData;
+            completedTabs++;
+          } else {
+            hasErrors = true;
           }
-          completedTabs++;
           setProgress((completedTabs / totalTabs) * 100);
         } catch (error) {
           console.error(`Error fetching ${tab}:`, error);
+          hasErrors = true;
         }
       }
 
-      if (Object.keys(updatedData).length > 0) {
-        if (!updatedData.timestamp) {
-          updatedData.timestamp = new Date().toISOString();
-        }
+      if (Object.keys(updatedData).length > 1) { // More than just timestamp
         localStorage.setItem(STORAGE_KEYS.CAMPAIGN_DATA, JSON.stringify(updatedData));
         refreshData();
 
-        toast({
-          title: "Data Updated",
-          description: "Campaign data has been successfully refreshed. Taking you to analysis...",
-        });
+        if (hasErrors) {
+          toast({
+            title: "Partial Update",
+            description: "Some data was updated, but errors occurred. Check the table for details.",
+            variant: "destructive"
+          });
+        } else {
+          toast({
+            title: "Data Updated",
+            description: "Campaign data has been successfully refreshed. Taking you to analysis...",
+          });
 
-        // Add a small delay for the toast to be visible
-        setTimeout(() => {
-          navigate('/analysis');
-        }, 1500);
+          setTimeout(() => {
+            navigate('/analysis');
+          }, 1500);
+        }
       } else {
         throw new Error('No valid data received from any tab');
       }
@@ -185,10 +212,9 @@ export default function Settings() {
         </p>
       </div>
 
-      {/* Configuration Section */}
       <Accordion type="single" collapsible className="w-full mb-8">
         <AccordionItem value="configuration">
-          <AccordionTrigger>Configuration and Installation</AccordionTrigger>
+          <AccordionTrigger>Data Source Status</AccordionTrigger>
           <AccordionContent>
             <div className="space-y-4 p-4">
               <Table>
@@ -203,19 +229,31 @@ export default function Settings() {
                 <TableBody>
                   {Object.entries(DATA_SOURCES).map(([tab, source]) => (
                     <TableRow key={tab}>
-                      <TableCell className="font-medium">{source.title}</TableCell>
+                      <TableCell className="font-medium">
+                        <div>
+                          <div>{source.title}</div>
+                          <div className="text-xs text-muted-foreground">{source.description}</div>
+                        </div>
+                      </TableCell>
                       <TableCell>
                         {fetchStatus[tab as TabKey]?.error ? (
-                          <AlertCircle className="h-4 w-4 text-destructive" />
+                          <div className="flex items-center">
+                            <AlertCircle className="h-4 w-4 text-destructive mr-2" />
+                            <span className="text-xs text-destructive">Error</span>
+                          </div>
+                        ) : fetchStatus[tab as TabKey]?.isLoading ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
                         ) : fetchStatus[tab as TabKey]?.rowCount ? (
                           <CheckCircle2 className="h-4 w-4 text-green-500" />
                         ) : null}
                       </TableCell>
                       <TableCell>
-                        {fetchStatus[tab as TabKey]?.lastUpdated &&
+                        {fetchStatus[tab as TabKey]?.lastUpdated && 
                           new Date(fetchStatus[tab as TabKey].lastUpdated!).toLocaleString()}
                       </TableCell>
-                      <TableCell>{fetchStatus[tab as TabKey]?.rowCount?.toLocaleString() || 0}</TableCell>
+                      <TableCell>
+                        {fetchStatus[tab as TabKey]?.rowCount?.toLocaleString() || 0}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -225,12 +263,11 @@ export default function Settings() {
         </AccordionItem>
       </Accordion>
 
-      {/* Google Sheets Integration Section */}
       <Card className="mb-8">
         <CardHeader>
-          <CardTitle>Google Sheets Integration</CardTitle>
+          <CardTitle>Update Campaign Data</CardTitle>
           <CardDescription>
-            Update campaign data from all sources
+            Fetch latest data from all sources
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -249,11 +286,14 @@ export default function Settings() {
                 disabled={isLoading}
               >
                 {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {isLoading ? 'Loading...' : 'Update All Data'}
+                {isLoading ? 'Updating...' : 'Update All Data'}
               </Button>
             </div>
             {isLoading && (
               <Progress value={progress} className="w-full" />
+            )}
+            {error && (
+              <p className="text-sm text-destructive">{error}</p>
             )}
           </div>
         </CardContent>

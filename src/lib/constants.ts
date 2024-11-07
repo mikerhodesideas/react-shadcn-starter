@@ -1,6 +1,8 @@
 // src/lib/constants.ts
 
-export const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbwre7Zv6QaL9bZsUexe5lhPOadnXCbKpo-hz1oF0RZgWh0rWD6-R7LKfzYCz4xjMIya/exec'
+export const GOOGLE_SHEET_URL = import.meta.env.DEV 
+  ? 'https://script.google.com/macros/s/AKfycbwre7Zv6QaL9bZsUexe5lhPOadnXCbKpo-hz1oF0RZgWh0rWD6-R7LKfzYCz4xjMIya/exec'
+  : '' // Only use test URL in development mode
 
 export const STORAGE_KEYS = {
   CAMPAIGN_DATA: 'campaignData',
@@ -19,47 +21,40 @@ export const API = {
 export const DATA_SOURCES = {
   daily: {
     title: 'Daily Data',
-    description: 'Daily campaign performance metrics'
+    description: 'Daily campaign metrics'
   },
   thirty_days: {
     title: '30 Day Data',
-    description: 'Aggregated 30-day campaign performance'
+    description: '30-day aggregated metrics'
+  },
+  previous_thirty_days: {
+    title: 'Previous 30 Days',
+    description: '31-60 day comparison metrics'
+  },
+  seven_days: {
+    title: '7 Day Data',
+    description: '7-day aggregated metrics'
+  },
+  previous_seven_days: {
+    title: 'Previous 7 Days',
+    description: '8-14 day comparison metrics'
   },
   hourly_today: {
     title: 'Today\'s Hourly',
-    description: 'Hour-by-hour performance for today'
+    description: 'Hourly metrics for today'
   },
   hourly_yesterday: {
     title: 'Yesterday\'s Hourly',
-    description: 'Hour-by-hour performance for yesterday'
+    description: 'Hourly metrics for yesterday'
   },
   settings: {
     title: 'Campaign Settings',
-    description: 'Campaign configuration and bid strategies'
+    description: 'Campaign settings and configuration'
   },
   products: {
     title: 'Product Data',
-    description: 'Product-level performance metrics'
+    description: 'Product performance metrics'
   },
-
-  channels: {
-    title: 'Channels',
-    description: 'Performance by advertising channel'
-  },
-  pmax: {
-    title: 'Performance Max',
-    description: 'Performance Max campaign data'
-  }
-} as const
-
-// Tab keys
-export type TabKey = keyof typeof DATA_SOURCES
-
-// Fetch status
-export type FetchStatus = 'loading' | 'success' | 'error'
-
-
-/*
   match_types: {
     title: 'Match Types',
     description: 'Performance by keyword match type'
@@ -68,5 +63,19 @@ export type FetchStatus = 'loading' | 'success' | 'error'
     title: 'Search Terms',
     description: 'Search query performance data'
   },
-  */
- 
+  channels: {
+    title: 'Channels',
+    description: 'Channel performance metrics'
+  },
+  pmax: {
+    title: 'Performance Max',
+    description: 'Performance Max campaign metrics'
+  }
+} as const;
+
+// Tab keys
+export type TabKey = keyof typeof DATA_SOURCES
+
+// Fetch status
+export type FetchStatus = 'loading' | 'success' | 'error'
+

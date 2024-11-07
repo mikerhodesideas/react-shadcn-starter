@@ -231,10 +231,12 @@ const SetupWizard = () => {
 
     const renderStepOne = () => (
         <div className="space-y-4">
-            <p className="text-sm text-gray-600">First, create your copy of the template sheet and paste its URL below:</p>
+            <p className="text-base text-gray-600">First, create your copy of the template sheet and paste its URL below:</p>
             <Button
                 onClick={() => window.open(TEMPLATE_URL, '_blank')}
                 className="flex items-center space-x-2"
+                variant={sheetUrl ? "completed" : "default"}
+                disabled={sheetUrl}
             >
                 <ExternalLink className="h-4 w-4" />
                 <span>Create Sheet Copy</span>
@@ -268,18 +270,21 @@ const SetupWizard = () => {
 
     const renderStepTwo = () => (
         <div className="space-y-4">
-            <p className="text-sm text-gray-600">Copy and install the Google Ads script:</p>
+            <p className="text-base text-gray-600">Copy and install the Google Ads script:</p>
             <div className="flex space-x-2">
                 <Button
                     onClick={copyScript}
-                    disabled={!isSheetUrlValid}
+                    disabled={scriptCopied}
+                    variant={scriptCopied ? "completed" : "default"}
                     className="flex items-center space-x-2"
+                    size="lg"  // For larger text
                 >
                     {scriptCopied ? <CheckCircle className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                     <span>Copy Script</span>
                 </Button>
                 <Button
                     variant="outline"
+                    size="lg"  // For larger text
                     onClick={() => setShowInstructions(true)}
                 >
                     View Instructions
@@ -287,16 +292,19 @@ const SetupWizard = () => {
             </div>
             <Button
                 className="w-full"
+                size="lg"  // For larger text
+                variant={scriptCopied ? "default" : "secondary"}  // Only show full color if script is copied
                 onClick={() => setCurrentStep(3)}
+                disabled={!scriptCopied}  // Disable until script is copied
             >
                 I've Installed the Script
             </Button>
         </div>
     );
-
+    
     const renderStepThree = () => (
         <div className="space-y-4">
-            <p className="text-sm text-gray-600">Deploy your sheet as a Web App:</p>
+            <p className="text-base text-gray-600">Deploy your sheet as a Web App:</p>
             <ol className="list-decimal list-inside space-y-2 text-sm">
                 <li>Open your copied sheet</li>
                 <li>Click Extensions → Apps Script</li>
@@ -308,26 +316,30 @@ const SetupWizard = () => {
                 <li>Copy the Web App URL</li>
             </ol>
             <div className="space-y-2">
-                <Input
-                    type="url"
-                    value={webAppUrl}
-                    onChange={handleWebAppUrlChange}
-                    placeholder="Paste Web App URL here"
-                    className="w-full"
-                />
+                <div className="p-4 border-2 border-brand rounded-lg bg-brand/5">
+                    <Input
+                        type="url"
+                        value={webAppUrl}
+                        onChange={handleWebAppUrlChange}
+                        placeholder="Paste Web App URL here"
+                        className="w-full h-14 text-lg px-4 border-2 border-brand placeholder:text-gray-400 placeholder:text-lg focus:ring-brand focus:border-brand"
+                    />
+                </div>
                 {webAppUrl && !isWebAppUrlValid && (
                     <Alert variant="destructive">
                         <AlertCircle className="h-4 w-4" />
-                        <AlertDescription>
+                        <AlertDescription className="text-lg">
                             Please enter a valid Google Apps Script Web App URL
                         </AlertDescription>
                     </Alert>
                 )}
-
+    
                 <Button
                     className="w-full"
+                    size="lg"
                     onClick={handleSetupComplete}
                     disabled={!isWebAppUrlValid}
+                    variant={isWebAppUrlValid ? "default" : "secondary"}
                 >
                     Complete Setup
                 </Button>

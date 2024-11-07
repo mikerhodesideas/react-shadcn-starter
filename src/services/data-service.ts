@@ -20,6 +20,9 @@ interface StoredCampaignData {
   timestamp: string;
   daily: any[];
   thirty_days: any[];
+  previous_thirty_days: any[];
+  seven_days: any[];
+  previous_seven_days: any[];
   hourly_today: any[];
   hourly_yesterday: any[];
   settings: any[];

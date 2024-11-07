@@ -78,13 +78,13 @@ export default function TrendsPage() {
 
   // Get unique campaigns
   const campaigns = useMemo(() => {
-    return Array.from(new Set(dailyData.map(row => row.Campaign)))
+    return Array.from(new Set(dailyData.map((row: DailyData) => row.Campaign)))
   }, [dailyData])
 
   // Set default campaign
   useEffect(() => {
     if (campaigns.length > 0 && !selectedCampaign) {
-      setSelectedCampaign(campaigns[0])
+      setSelectedCampaign(campaigns[0] as string)
     }
   }, [campaigns, selectedCampaign])
 
@@ -93,23 +93,23 @@ export default function TrendsPage() {
     if (!selectedCampaign || !dateRange?.from || !dateRange?.to) return []
     
     return dailyData
-      .filter(row => {
+      .filter((row: DailyData) => {
         const rowDate = new Date(row.Date)
         if (!(dateRange.from instanceof Date) || !(dateRange.to instanceof Date)) return false
         return row.Campaign === selectedCampaign && 
                rowDate >= dateRange.from && 
                rowDate <= dateRange.to
       })
-      .sort((a, b) => new Date(a.Date).getTime() - new Date(b.Date).getTime())
+      .sort((a: DailyData, b: DailyData) => new Date(a.Date).getTime() - new Date(b.Date).getTime())
   }, [dailyData, selectedCampaign, dateRange])
 
   // Calculate date range summary
   const dateRangeSummary = useMemo(() => {
     if (!filteredData.length) return 'No dates available'
     
-    const dates = filteredData.map(d => new Date(d.Date))
-    const startDate = new Date(Math.min(...dates.map(d => d.getTime())))
-    const endDate = new Date(Math.max(...dates.map(d => d.getTime())))
+    const dates = filteredData.map((d: DailyData) => new Date(d.Date))
+    const startDate = new Date(Math.min(...dates.map((d: Date) => d.getTime())))
+    const endDate = new Date(Math.max(...dates.map((d: Date) => d.getTime())))
     
     return `Showing data from ${startDate.toLocaleDateString('en-GB', {
       day: '2-digit',
@@ -125,7 +125,7 @@ export default function TrendsPage() {
   // Calculate totals
   const totals = useMemo(() => {
     return metrics.reduce((acc, metric) => {
-      acc[metric.key] = filteredData.reduce((sum, row) => sum + (row[metric.key] || 0), 0)
+      acc[metric.key] = filteredData.reduce((sum: number, row: DailyData) => sum + (row[metric.key] || 0), 0)
       return acc
     }, {} as Record<Metric['key'], number>)
   }, [filteredData])
@@ -172,7 +172,7 @@ export default function TrendsPage() {
          <CardContent className="pt-6">
            <DateRangePicker
              value={dateRange}
-             onChange={setDateRange}
+             onChange={(date: DateRange) => setDateRange(date)}
            />
          </CardContent>
        </Card>

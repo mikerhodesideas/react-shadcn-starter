@@ -1,33 +1,13 @@
-// Global constants
-const TEMPLATE_URL = 'https://docs.google.com/spreadsheets/d/1VynLYz0q-tYa9fpXhdWTUnBIdCGmBrgMkRz1rD6EhC0/edit?gid=0#gid=0';
-const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1XmQYHWYbQbtn6mnrGYB71dsixbp66Eo3n5o7fka_s10/edit?gid=1035127487#gid=1035127487'; // Add your sheet URL here if you want to use an existing sheet
+// gads-script.js in /lib/  -  full script without SHEET_URL (added in app)
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // 1 second
 
-// Timing utility functions
-function startTimer() {
-    return new Date().getTime();
-}
-
-function endTimer(startTime, operation) {
-    const endTime = new Date().getTime();
-    const duration = (endTime - startTime) / 1000; // Convert to seconds
-    Logger.log(`⏱️ ${operation} took ${duration.toFixed(2)} seconds`);
-    return duration;
-}
-
 function main() {
     try {
-        const scriptStartTime = startTimer();
-        Logger.log('Starting enhanced campaign data export script');
-        
-        // Get or create spreadsheet
         const spreadsheet = getOrCreateSpreadsheet();
-        
-        let elements = defineElements({});
-        let queries = buildQueries(elements, 100);
+        const elements = defineElements();
+        const queries = buildQueries(elements);
 
-        // Define datasets with name and query mapping
         const datasets = [
             { name: 'hourly_today', query: queries.hourlyTodayQuery },
             { name: 'hourly_yesterday', query: queries.hourlyYesterdayQuery },
@@ -38,61 +18,51 @@ function main() {
             { name: 'match_types', query: queries.matchTypesQuery },
             { name: 'search_terms', query: queries.searchTermsQuery },
             { name: 'channels', query: queries.channelTypeSpendQuery },
-            { name: 'pmax', query: queries.pMaxSubChannelQuery }
+            { name: 'pmax', query: queries.pMaxSubChannelQuery },
+            { name: 'previous_thirty_days', query: queries.previousThirtyDaysQuery },
+            { name: 'seven_days', query: queries.sevenDaysQuery },
+            { name: 'previous_seven_days', query: queries.previousSevenDaysQuery }
         ];
 
-        // Process each dataset with retries and timing
         for (const { name, query } of datasets) {
-            const sheetStartTime = startTimer();
-            let success = false;
-            let retryCount = 0;
-            
-            while (!success && retryCount < MAX_RETRIES) {
-                try {
-                    const data = fetchData(query);
-                    if (data && data.length > 0) {
-                        // Get or create sheet with retries
-                        let sheet = getOrCreateSheet(spreadsheet, name);
-                        if (!sheet) {
-                            throw new Error('Failed to create/access sheet');
-                        }
-                        
-                        // Clear existing content
-                        sheet.clear();
-                        
-                        // Populate data
-                        populateSheet(sheet, data);
-                        const sheetDuration = endTimer(sheetStartTime, `Sheet ${name}`);
-                        success = true;
-                    } else {
-                        Logger.log(`No data available for ${name}`);
-                        success = true; // Consider no data as success to avoid retries
-                    }
-                } catch (error) {
-                    retryCount++;
-                    if (retryCount === MAX_RETRIES) {
-                        Logger.log(`Error processing ${name} after ${MAX_RETRIES} attempts: ${error.message}`);
-                    } else {
-                        Logger.log(`Retry ${retryCount} for ${name}: ${error.message}`);
-                        Utilities.sleep(RETRY_DELAY * retryCount); // Exponential backoff
-                    }
-                }
-            }
+            processDataset(spreadsheet, name, query);
         }
 
-        // Set sharing permissions if it's a new sheet
         if (!SHEET_URL) {
             DriveApp.getFileById(spreadsheet.getId())
                 .setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
         }
         
         Logger.log(`Spreadsheet available at: ${spreadsheet.getUrl()}`);
-        const totalDuration = endTimer(scriptStartTime, 'Total script execution');
-        Logger.log('Script completed successfully');
-
     } catch (error) {
         Logger.log(`Script failed with error: ${error.message}`);
-        Logger.log(`Stack trace: ${error.stack}`);
+    }
+}
+
+function processDataset(spreadsheet, name, query) {
+    let retryCount = 0;
+    while (retryCount < MAX_RETRIES) {
+        try {
+            const data = fetchData(query);
+            if (data?.length) {
+                const sheet = getOrCreateSheet(spreadsheet, name);
+                if (sheet) {
+                    sheet.clear();
+                    populateSheet(sheet, data);
+                    break;
+                }
+            } else {
+                Logger.log(`No data available for ${name}`);
+                break;
+            }
+        } catch (error) {
+            retryCount++;
+            if (retryCount === MAX_RETRIES) {
+                Logger.log(`Error processing ${name}: ${error.message}`);
+            } else {
+                Utilities.sleep(RETRY_DELAY * retryCount);
+            }
+        }
     }
 }
 
@@ -102,68 +72,84 @@ function getOrCreateSheet(spreadsheet, name) {
     
     while (!sheet && retryCount < MAX_RETRIES) {
         try {
-            if (!sheet) {
-                sheet = spreadsheet.insertSheet(name);
-            }
-            return sheet;
+            sheet = spreadsheet.insertSheet(name);
         } catch (error) {
             retryCount++;
-            if (retryCount === MAX_RETRIES) {
-                Logger.log(`Failed to create sheet ${name} after ${MAX_RETRIES} attempts`);
-                return null;
-            }
+            if (retryCount === MAX_RETRIES) return null;
             Utilities.sleep(RETRY_DELAY * retryCount);
         }
     }
     return sheet;
 }
 
-function getOrCreateSpreadsheet() {
-    let retryCount = 0;
-    while (retryCount < MAX_RETRIES) {
-        try {
-            if (SHEET_URL && SHEET_URL.length > 0) {
-                return SpreadsheetApp.openByUrl(SHEET_URL);
-            } else {
-                const templateId = TEMPLATE_URL.match(/[-\w]{25,}/);
-                if (!templateId) {
-                    throw new Error('Invalid template URL');
-                }
-                const template = DriveApp.getFileById(templateId[0]);
-                const copy = template.makeCopy('Google Ads Data ' + new Date().toISOString().split('T')[0]);
-                return SpreadsheetApp.open(copy);
-            }
-        } catch (error) {
-            retryCount++;
-            if (retryCount === MAX_RETRIES) {
-                throw new Error(`Failed to access/create spreadsheet after ${MAX_RETRIES} attempts: ${error.message}`);
-            }
-            Utilities.sleep(RETRY_DELAY * retryCount);
-        }
-    }
-}
-
 function populateSheet(sheet, data) {
-    if (!data || data.length === 0) return;
-    
-    const populateStartTime = startTimer();
+    if (!data?.length) return;
     const headers = Object.keys(data[0]);
+    const values = [headers].concat(data.map(row => headers.map(header => row[header])));
+    sheet.getRange(1, 1, values.length, headers.length).setValues(values);
+}
+
+function getDateRanges() {
+    const timezone = AdsApp.currentAccount().getTimeZone();
+    const today = new Date();
     
+    const getRange = (start, end) => ({
+        start: Utilities.formatDate(new Date(today.getTime() - start * 86400000), timezone, 'yyyy-MM-dd'),
+        end: Utilities.formatDate(new Date(today.getTime() - end * 86400000), timezone, 'yyyy-MM-dd')
+    });
+    
+    return {
+        last30Days: getRange(30, 1),
+        previous30Days: getRange(60, 31),
+        last7Days: getRange(7, 1),
+        previous7Days: getRange(14, 8),
+        last100Days: getRange(100, 1)
+    };
+}
+
+function fetchData(query) {
     try {
-        // Combine headers and data into single array
-        const values = [headers].concat(
-            data.map(row => headers.map(header => row[header]))
-        );
-        sheet.getRange(1, 1, values.length, headers.length).setValues(values);
-        
-        endTimer(populateStartTime, `Populated sheet with ${values.length} rows`);
+        const data = [];
+        const iterator = AdsApp.search(query, { 'apiVersion': 'v18' });
+        while (iterator.hasNext()) {
+            data.push(flattenObject(iterator.next()));
+        }
+        return transformHeaders(data);
     } catch (error) {
-        throw new Error(`Error populating sheet: ${error.message}`);
+        Logger.log(`Query error: ${error.message}`);
+        return null;
     }
 }
 
-function buildQueries(e, numberOfDays) {
+function flattenObject(obj) {
+    const result = {};
+    const recurse = (obj, prefix = '') => {
+        Object.entries(obj).forEach(([key, value]) => {
+            const newKey = prefix ? `${prefix}.${key}` : key;
+            if (value && typeof value === 'object') {
+                recurse(value, newKey);
+            } else {
+                result[newKey] = value;
+            }
+        });
+    };
+    recurse(obj);
+    return result;
+}
+
+function getOrCreateSpreadsheet() {
+    try {
+        if (SHEET_URL && SHEET_URL.length > 0) {
+            return SpreadsheetApp.openByUrl(SHEET_URL);
+        } 
+    } catch (error) {
+        throw new Error(`Failed to access/create spreadsheet: ${error.message}`);
+    }
+}
+
+function buildQueries(e) {
     let queries = {};
+    let dateRanges = getDateRanges();
 
     queries.hourlyTodayQuery = `
         SELECT ${[e.segHour, e.campName, e.campId, e.conv, e.clicks, e.cost,
@@ -183,15 +169,35 @@ function buildQueries(e, numberOfDays) {
         SELECT ${[e.segDate, e.campName, e.campId, e.conv, e.clicks, e.cost,
         e.value, e.impr, e.searchBudgetLost, e.searchShare, e.searchRankLost].join(',')}
         FROM campaign 
-        WHERE ${prepareDateRange(numberOfDays)}
+        WHERE segments.date BETWEEN "${dateRanges.last100Days.start}" AND "${dateRanges.last100Days.end}"
         ORDER BY segments.date DESC`;
 
-    // New 30 days query without date segmentation
-    queries.thirtyDaysQuery = `
+        queries.thirtyDaysQuery = `
         SELECT ${[e.campName, e.campId, e.conv, e.clicks, e.cost,
         e.value, e.impr, e.searchBudgetLost, e.searchShare, e.searchRankLost].join(',')}
         FROM campaign 
-        WHERE segments.date DURING LAST_30_DAYS
+        WHERE segments.date BETWEEN "${dateRanges.last30Days.start}" AND "${dateRanges.last30Days.end}"
+        ORDER BY metrics.cost_micros DESC`;
+
+    queries.previousThirtyDaysQuery = `
+        SELECT ${[e.campName, e.campId, e.conv, e.clicks, e.cost,
+        e.value, e.impr, e.searchBudgetLost, e.searchShare, e.searchRankLost].join(',')}
+        FROM campaign 
+        WHERE segments.date BETWEEN "${dateRanges.previous30Days.start}" AND "${dateRanges.previous30Days.end}"
+        ORDER BY metrics.cost_micros DESC`;
+
+    queries.sevenDaysQuery = `
+        SELECT ${[e.campName, e.campId, e.conv, e.clicks, e.cost,
+        e.value, e.impr, e.searchBudgetLost, e.searchShare, e.searchRankLost].join(',')}
+        FROM campaign 
+        WHERE segments.date BETWEEN "${dateRanges.last7Days.start}" AND "${dateRanges.last7Days.end}"
+        ORDER BY metrics.cost_micros DESC`;
+
+    queries.previousSevenDaysQuery = `
+        SELECT ${[e.campName, e.campId, e.conv, e.clicks, e.cost,
+        e.value, e.impr, e.searchBudgetLost, e.searchShare, e.searchRankLost].join(',')}
+        FROM campaign 
+        WHERE segments.date BETWEEN "${dateRanges.previous7Days.start}" AND "${dateRanges.previous7Days.end}"
         ORDER BY metrics.cost_micros DESC`;
 
     queries.campaignSettingsQuery = `
@@ -235,177 +241,87 @@ function buildQueries(e, numberOfDays) {
     return queries;
 }
 
-function defineElements(s) {
-    return {
-        segHour: ' segments.hour ',
-        segDate: ' segments.date ',
-        campName: ' campaign.name ',
-        campId: ' campaign.id ',
-        conv: ' metrics.conversions ',
-        clicks: ' metrics.clicks ',
-        cost: ' metrics.cost_micros ',
-        value: ' metrics.conversions_value ',
-        impr: ' metrics.impressions ',
-        searchBudgetLost: ' metrics.search_budget_lost_impression_share ',
-        searchShare: ' metrics.search_impression_share ',
-        searchRankLost: ' metrics.search_rank_lost_impression_share ',
-        biddingStrategy: ' campaign.bidding_strategy ',
-        biddingStatus: ' campaign.bidding_strategy_system_status ',
-        biddingType: ' campaign.bidding_strategy_type ',
-        budget: ' campaign.campaign_budget ',
-        campaignGroup: ' campaign.campaign_group ',
-        chType: ' campaign.advertising_channel_type ',
-        chSubType: ' campaign.advertising_channel_sub_type ',
-        optStatus: ' campaign.ad_serving_optimization_status ',
-        labels: ' campaign.labels ',
-        targetCPA: ' campaign.maximize_conversions.target_cpa_micros ',
-        targetROAS: ' campaign.maximize_conversion_value.target_roas ',
-        cpcCeiling: ' campaign.percent_cpc.cpc_bid_ceiling_micros ',
-        rtbOptIn: ' campaign.real_time_bidding_setting.opt_in ',
-        primaryReasons: ' campaign.primary_status_reasons ',
-        primaryStatus: ' campaign.primary_status ',
-        servingStatus: ' campaign.serving_status ',
-        status: ' campaign.status ',
-        urlOptOut: ' campaign.url_expansion_opt_out ',
-        allConv: ' metrics.all_conversions ',
-        allConvValue: ' metrics.all_conversions_value ',
-        convDate: ' metrics.conversions_by_conversion_date ',
-        convValueDate: ' metrics.conversions_value_by_conversion_date ',
-        avgCpc: ' metrics.average_cpc ',
-        views: ' metrics.video_views ',
-        cpv: ' metrics.average_cpv ',
-        prodChannel: ' segments.product_channel ',
-        prodId: ' segments.product_item_id ',
-        prodTitle: ' segments.product_title ',
-        keywordText: ' ad_group_criterion.keyword.text ',
-        keywordMatchType: ' ad_group_criterion.keyword.match_type ',
-        searchTerm: ' search_term_view.search_term ',
-        assetInteractionTarget: ' segments.asset_interaction_target.asset ',
-        interactionOnAsset: ' segments.asset_interaction_target.interaction_on_this_asset '
-    };
-}
-
-function prepareDateRange(numberOfDays) {
-    let timezone = AdsApp.currentAccount().getTimeZone();
-    let today = new Date(), yesterday = new Date(), startDate = new Date();
-    yesterday.setDate(today.getDate() - 1);
-    startDate.setDate(today.getDate() - numberOfDays);
-
-    let fYesterday = Utilities.formatDate(yesterday, timezone, 'yyyy-MM-dd');
-    let fStartDate = Utilities.formatDate(startDate, timezone, 'yyyy-MM-dd');
-    let mainDateRange = `segments.date BETWEEN "${fStartDate}" AND "${fYesterday}"`;
-
-    return mainDateRange;
-}
-
-function formatDateLiteral(dateString) {
-    // Use a regular expression to extract date parts & regex to rearange them
-    let dateParts = dateString.match(/(\d{2})\/(\d{2})\/(\d{4})/);
-    if (!dateParts) {
-        throw new Error('Date format is not valid. Expected format dd/mm/yyyy.');
-    }
-    let formattedDate = `${dateParts[3]}-${dateParts[2]}-${dateParts[1]}`;
-    return formattedDate;
-}
-
-function flattenObject(ob) {
-    let toReturn = {};
-    let stack = [{ obj: ob, prefix: '' }];
-
-    while (stack.length > 0) {
-        let { obj, prefix } = stack.pop();
-        for (let i in obj) {
-            if (obj.hasOwnProperty(i)) {
-                let key = prefix ? prefix + '.' + i : i;
-                if (typeof obj[i] === 'object' && obj[i] !== null) {
-                    stack.push({ obj: obj[i], prefix: key });
-                } else {
-                    toReturn[key] = obj[i];
-                }
-            }
-        }
-    }
-
-    return toReturn;
-}
-
-function getHeaderMapping() {
-    return {
-        // Hourly and Daily Metrics
-        'segments.hour': 'Hour',
-        'segments.date': 'Date',
-        'campaign.name': 'Campaign',
-        'campaign.id': 'CampaignId',
-        'metrics.conversions': 'Conversions',
-        'metrics.clicks': 'Clicks',
-        'metrics.costMicros': 'Cost',
-        'metrics.conversionsValue': 'ConvValue',
-        'metrics.impressions': 'Impressions',
-        'metrics.searchBudgetLostImpressionShare': 'LostToBudget',
-        'metrics.searchImpressionShare': 'ImprShare',
-        'metrics.searchRankLostImpressionShare': 'LostToRank',
-
-        // Campaign Settings
-        'campaign.biddingStrategy': 'BidStrategy',
-        'campaign.biddingStrategySystemStatus': 'BidStatus',
-        'campaign.biddingStrategyType': 'BidType',
-        'campaign.campaignBudget': 'Budget',
-        'campaign.campaignGroup': 'Group',
-        'campaign.advertisingChannelType': 'Channel',
-        'campaign.advertisingChannelSubType': 'SubChannel',
-        'campaign.adServingOptimizationStatus': 'OptStatus',
-        'campaign.labels': 'Labels',
-        'campaign.maximizeConversions.targetCpaMicros': 'TargetCPA',
-        'campaign.maximizeConversionValue.targetRoas': 'TargetROAS',
-        'campaign.percentCpc.cpcBidCeilingMicros': 'MaxCPC',
-        'campaign.realTimeBiddingSetting.optIn': 'RTBOptIn',
-        'campaign.primaryStatusReasons': 'StatusReasons',
-        'campaign.primaryStatus': 'PrimaryStatus',
-        'campaign.servingStatus': 'ServingStatus',
-        'campaign.status': 'Status',
-        'campaign.urlExpansionOptOut': 'OptOutURLExp'
-    };
-}
-
 function transformHeaders(data) {
     if (!data || data.length === 0) return data;
     
-    const headerMapping = getHeaderMapping();
     return data.map(row => {
         const transformedRow = {};
         Object.entries(row).forEach(([key, value]) => {
-            // Convert cost from micros to actual currency
-            if (key === 'metrics.costMicros') {
-                value = value / 1000000;
+            // Find the field definition that matches this key
+            const fieldDef = Object.values(FIELD_DEFINITIONS).find(def => def.query.trim() === key);
+            if (fieldDef) {
+                // Apply any transform function if it exists
+                const transformedValue = fieldDef.transform ? fieldDef.transform(value) : value;
+                transformedRow[fieldDef.header] = transformedValue;
+            } else {
+                transformedRow[key] = value;
             }
-            // Convert target CPA from micros to actual currency
-            if (key === 'campaign.maximizeConversions.targetCpaMicros') {
-                value = value / 1000000;
-            }
-            // Convert max CPC from micros to actual currency
-            if (key === 'campaign.percentCpc.cpcBidCeilingMicros') {
-                value = value / 1000000;
-            }
-            
-            const newKey = headerMapping[key] || key;
-            transformedRow[newKey] = value;
         });
         return transformedRow;
     });
 }
 
-function fetchData(q) {
-    try {
-        let data = [];
-        let iterator = AdsApp.search(q, { 'apiVersion': 'v18' });
-        while (iterator.hasNext()) {
-            let row = iterator.next();
-            data.push(flattenObject(row));
-        }
-        return transformHeaders(data);
-    } catch (error) {
-        Logger.log(`Error fetching data for query: ${q}`);
-        Logger.log(`Error message: ${error.message}`);
-        return null;
+function defineElements() {
+    const elements = {};
+    for (const [key, value] of Object.entries(FIELD_DEFINITIONS)) {
+        elements[key] = value.query;
     }
+    return elements;
 }
+
+function getHeaderMapping() {
+    const mapping = {};
+    for (const [_, value] of Object.entries(FIELD_DEFINITIONS)) {
+        const queryField = value.query.trim();
+        mapping[queryField] = value.header;
+    }
+    return mapping;
+}
+
+const FIELD_DEFINITIONS = {
+    segHour: { query: ' segments.hour ', header: 'Hour' },
+    segDate: { query: ' segments.date ', header: 'Date' },
+    campName: { query: ' campaign.name ', header: 'Campaign' },
+    campId: { query: ' campaign.id ', header: 'CampaignId' },
+    conv: { query: ' metrics.conversions ', header: 'Conversions' },
+    clicks: { query: ' metrics.clicks ', header: 'Clicks' },
+    cost: { query: ' metrics.cost_micros ', header: 'Cost', transform: value => value / 1000000 },
+    value: { query: ' metrics.conversions_value ', header: 'ConvValue' },
+    impr: { query: ' metrics.impressions ', header: 'Impressions' },
+    searchBudgetLost: { query: ' metrics.search_budget_lost_impression_share ', header: 'LostToBudget' },
+    searchShare: { query: ' metrics.search_impression_share ', header: 'ImprShare' },
+    searchRankLost: { query: ' metrics.search_rank_lost_impression_share ', header: 'LostToRank' },
+    biddingStrategy: { query: ' campaign.bidding_strategy ', header: 'BidStrategy' },
+    biddingStatus: { query: ' campaign.bidding_strategy_system_status ', header: 'BidStatus' },
+    biddingType: { query: ' campaign.bidding_strategy_type ', header: 'BidType' },
+    budget: { query: ' campaign.campaign_budget ', header: 'Budget' },
+    campaignGroup: { query: ' campaign.campaign_group ', header: 'Group' },
+    chType: { query: ' campaign.advertising_channel_type ', header: 'Channel' },
+    chSubType: { query: ' campaign.advertising_channel_sub_type ', header: 'SubChannel' },
+    optStatus: { query: ' campaign.ad_serving_optimization_status ', header: 'OptStatus' },
+    labels: { query: ' campaign.labels ', header: 'Labels' },
+    targetCPA: { query: ' campaign.maximize_conversions.target_cpa_micros ', header: 'TargetCPA', transform: value => value / 1000000 },
+    targetROAS: { query: ' campaign.maximize_conversion_value.target_roas ', header: 'TargetROAS' },
+    cpcCeiling: { query: ' campaign.percent_cpc.cpc_bid_ceiling_micros ', header: 'MaxCPC', transform: value => value / 1000000 },
+    rtbOptIn: { query: ' campaign.real_time_bidding_setting.opt_in ', header: 'RTBOptIn' },
+    primaryReasons: { query: ' campaign.primary_status_reasons ', header: 'StatusReasons' },
+    primaryStatus: { query: ' campaign.primary_status ', header: 'PrimaryStatus' },
+    servingStatus: { query: ' campaign.serving_status ', header: 'ServingStatus' },
+    status: { query: ' campaign.status ', header: 'Status' },
+    urlOptOut: { query: ' campaign.url_expansion_opt_out ', header: 'OptOutURLExp' },
+    allConv: { query: ' metrics.all_conversions ', header: 'AllConversions' },
+    allConvValue: { query: ' metrics.all_conversions_value ', header: 'AllConvValue' },
+    convDate: { query: ' metrics.conversions_by_conversion_date ', header: 'ConvByDate' },
+    convValueDate: { query: ' metrics.conversions_value_by_conversion_date ', header: 'ConvValueByDate' },
+    avgCpc: { query: ' metrics.average_cpc ', header: 'AvgCPC' },
+    views: { query: ' metrics.video_views ', header: 'Views' },
+    cpv: { query: ' metrics.average_cpv ', header: 'AvgCPV' },
+    prodChannel: { query: ' segments.product_channel ', header: 'ProductChannel' },
+    prodId: { query: ' segments.product_item_id ', header: 'ProductId' },
+    prodTitle: { query: ' segments.product_title ', header: 'ProductTitle' },
+    keywordText: { query: ' ad_group_criterion.keyword.text ', header: 'KeywordText' },
+    keywordMatchType: { query: ' ad_group_criterion.keyword.match_type ', header: 'KeywordMatchType' },
+    searchTerm: { query: ' search_term_view.search_term ', header: 'SearchTerm' },
+    assetInteractionTarget: { query: ' segments.asset_interaction_target.asset ', header: 'AssetInteraction' },
+    interactionOnAsset: { query: ' segments.asset_interaction_target.interaction_on_this_asset ', header: 'AssetInteractionCount' }
+};

@@ -1,28 +1,20 @@
 // src/lib/google-ads-script-template.ts
+import baseScript from './gads-script.js?raw';  // Note the ?raw suffix
 
 export const getGoogleAdsScript = (sheetUrl: string) => {
-    return `const SHEET_URL = "${sheetUrl}"
-  
-  const MAX_RETRIES = 3;
-  const RETRY_DELAY = 1000; // 1 second
-  // Timing utility functions
-  function startTimer() {
-      return new Date().getTime();
-  }
-  function endTimer(startTime, operation) {
-      const endTime = new Date().getTime();
-      const duration = (endTime - startTime) / 1000; // Convert to seconds
-      Logger.log(\`⏱️ \${operation} took \${duration.toFixed(2)} seconds\`);
-      return duration;
-  }
-  function main() {
-      const scriptStartTime = startTimer();
-      Logger.log('Starting enhanced campaign data export script');
-      
-      // Get or create spreadsheet
-      const spreadsheet = getOrCreateSpreadsheet();
-      
-      let elements = defineElements({});
-      let queries = buildQueries(elements, 100);
-  }`
-  }
+    // Sanitize the URL to prevent script injection
+    const sanitizedUrl = sheetUrl.replace(/["\\]/g, '\\$&');
+    const sheetUrlLine = `const SHEET_URL = "${sanitizedUrl}";\n\n`;
+    return sheetUrlLine + baseScript;
+};
+
+export const handleCopyScript = async (sheetUrl: string): Promise<boolean> => {
+    try {
+        const fullScript = getGoogleAdsScript(sheetUrl);
+        await navigator.clipboard.writeText(fullScript);
+        return true;
+    } catch (error) {
+        console.error('Failed to copy script:', error);
+        return false;
+    }
+};
