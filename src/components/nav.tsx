@@ -10,7 +10,7 @@ const routes = [
   },
   {
     href: '/analysis',
-    label: 'Campaign Analysis'
+    label: 'Profit Analysis'
   },
   {
     href: '/trends',

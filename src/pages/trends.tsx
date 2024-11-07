@@ -19,19 +19,19 @@ const metrics: Metric[] = [
   { 
     key: 'Impressions', 
     label: 'Impressions', 
-    format: (v) => Math.round(v).toLocaleString(),
+    format: (v) => `${v.toFixed(0)}`,
     color: '#f97316'
   },
   { 
     key: 'Clicks', 
     label: 'Clicks', 
-    format: (v) => Math.round(v).toLocaleString(),
+    format: (v) => `${v.toFixed(0)}`,
     color: '#22c55e'
   },
   { 
     key: 'Cost', 
     label: 'Cost', 
-    format: (v) => `€${v.toFixed(2)}`,
+    format: (v) => `${v.toFixed(0)}`,
     color: '#0ea5e9'
   },
   { 
@@ -43,7 +43,7 @@ const metrics: Metric[] = [
   { 
     key: 'ConvValue', 
     label: 'Value', 
-    format: (v) => `€${v.toFixed(2)}`,
+    format: (v) => `${v.toFixed(0)}`,
     color: '#ef4444'
   }
 ]
@@ -170,7 +170,9 @@ export default function Trends() {
                   height={60}
                   tickFormatter={(value) => {
                     const date = new Date(value)
-                    return `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}`
+                    const day = date.getDate()
+                    const month = date.toLocaleString('en-US', { month: 'short' })
+                    return `${day} ${month}`
                   }}
                 />
                 
@@ -180,6 +182,12 @@ export default function Trends() {
                     tickFormatter={(value) => {
                       const metric = metrics.find(m => m.key === selectedMetrics[0])
                       return metric?.format(value) || value
+                    }}
+                    label={{ 
+                      value: metrics.find(m => m.key === selectedMetrics[0])?.label,
+                      angle: -90,
+                      position: 'insideLeft',
+                      style: { textAnchor: 'middle' }
                     }}
                   />
                 )}
@@ -191,6 +199,12 @@ export default function Trends() {
                     tickFormatter={(value) => {
                       const metric = metrics.find(m => m.key === selectedMetrics[1])
                       return metric?.format(value) || value
+                    }}
+                    label={{ 
+                      value: metrics.find(m => m.key === selectedMetrics[1])?.label,
+                      angle: 90,
+                      position: 'insideRight',
+                      style: { textAnchor: 'middle' }
                     }}
                   />
                 )}
@@ -224,6 +238,8 @@ export default function Trends() {
                       stroke={metric.color}
                       yAxisId={index === 0 ? "left" : "right"}
                       name={metric.label}
+                      dot={false}
+                      activeDot={false}
                     />
                   )
                 })}

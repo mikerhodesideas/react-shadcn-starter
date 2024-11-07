@@ -535,19 +535,19 @@ const campaigns = useMemo(() => {
   
       if (cost < minCost && significantLostBudget > 0) {
         recommendation = 'increase';
-        recommendationDetail = `Increase spend to capture $${Math.round(lostBudgetDollars).toLocaleString()} in lost budget impression share. Current ROAS is ${roas.toFixed(1)}x.`;
+        recommendationDetail = `Increase spend to capture ${Math.round(lostBudgetDollars).toLocaleString()} in lost budget impression share. Current ROAS is ${roas.toFixed(1)}x.`;
       } else if (cost > maxCost) {
         recommendation = 'decrease';
-        recommendationDetail = `Decrease spend as current cost ($${Math.round(cost).toLocaleString()}) is above optimal range. Max optimal spend is $${Math.round(maxCost).toLocaleString()}.`;
+        recommendationDetail = `Decrease spend as current cost (${Math.round(cost).toLocaleString()}) is above optimal range. Max optimal spend is ${Math.round(maxCost).toLocaleString()}.`;
       } else if (cost < minCost) {
         recommendation = 'increase';
-        recommendationDetail = `Increase spend to reach optimal range (minimum $${Math.round(minCost).toLocaleString()}). Current ROAS of ${roas.toFixed(1)}x suggests room for growth.`;
+        recommendationDetail = `Increase spend to reach optimal range (minimum ${Math.round(minCost).toLocaleString()}). Current ROAS of ${roas.toFixed(1)}x suggests room for growth.`;
       } else if (roas < 1) {
         recommendation = 'decrease';
         recommendationDetail = `ROAS (${roas.toFixed(1)}x) is below 1.0 - reduce spend to improve profitability.`;
       } else {
         recommendation = 'optimal';
-        recommendationDetail = `Current spend is within optimal range. ROAS is ${roas.toFixed(1)}x and profit is $${Math.round(profit).toLocaleString()}.`;
+        recommendationDetail = `Current spend is within optimal range. ROAS is ${roas.toFixed(1)}x and profit is ${Math.round(profit).toLocaleString()}.`;
       }
   
       return {
@@ -624,7 +624,7 @@ const campaigns = useMemo(() => {
       if (direction > 0 && projectedCost > summary.maxCost) {
         const actualIncreasePercent = ((summary.maxCost - summary.cost) / summary.cost * 100).toFixed(1);
         projectedCost = summary.maxCost;
-        changeReason = `Increasing by ${actualIncreasePercent}% to reach optimal range maximum ($${Math.round(summary.maxCost).toLocaleString()})`;
+        changeReason = `Increasing by ${actualIncreasePercent}% to reach optimal range maximum (${Math.round(summary.maxCost).toLocaleString()})`;
       } else if (direction < 0) {
         changeReason = `Reducing spend by ${decreasePercentage}% to improve profitability`;
       } else if (direction > 0) {
@@ -675,16 +675,16 @@ const campaigns = useMemo(() => {
             <CartesianGrid strokeDasharray="3 3" stroke="currentColor" opacity={0.1} />
             <XAxis 
               dataKey="cost" 
-              tickFormatter={(value) => `$${Math.round(value/1000)}k`}
+              tickFormatter={(value) => `${Math.round(value/1000)}k`}
               stroke="currentColor"
             />
             <YAxis 
-              tickFormatter={(value) => `$${Math.round(value/1000)}k`}
+              tickFormatter={(value) => `${Math.round(value/1000)}k`}
               stroke="currentColor"
             />
             <Tooltip 
-              formatter={(value: number) => [`$${Math.round(value).toLocaleString()}`, 'Profit']}
-              labelFormatter={(label: number) => `Cost: $${Math.round(label).toLocaleString()}`}
+              formatter={(value: number) => [`${Math.round(value).toLocaleString()}`, 'Profit']}
+              labelFormatter={(label: number) => `Cost: ${Math.round(label).toLocaleString()}`}
             />
             
             {/* Add optimal zone shading */}
@@ -759,14 +759,14 @@ const campaigns = useMemo(() => {
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis 
               dataKey="cost" 
-              tickFormatter={(value) => `$${(value/1000).toFixed(1)}k`}
+              tickFormatter={(value) => `${(value/1000).toFixed(1)}k`}
             />
             <YAxis 
-              tickFormatter={(value) => `$${(value/1000).toFixed(1)}k`}
+              tickFormatter={(value) => `${(value/1000).toFixed(1)}k`}
             />
             <Tooltip 
-              formatter={(value: number) => [`$${value.toLocaleString()}`, 'Incremental Profit']}
-              labelFormatter={(label: number) => `Cost: $${label.toLocaleString()}`}
+              formatter={(value: number) => [`${value.toLocaleString()}`, 'Incremental Profit']}
+              labelFormatter={(label: number) => `Cost: ${label.toLocaleString()}`}
             />
             
             {/* Add zero line */}
@@ -806,10 +806,10 @@ const campaigns = useMemo(() => {
               tickFormatter={(value) => `${value.toFixed(1)}x`}
             />
             <YAxis 
-              tickFormatter={(value) => `$${Math.round(value/1000)}k`}
+              tickFormatter={(value) => `${Math.round(value/1000)}k`}
             />
             <Tooltip 
-              formatter={(value: number) => [`$${Math.round(value).toLocaleString()}`, 'Profit']}
+              formatter={(value: number) => [`${Math.round(value).toLocaleString()}`, 'Profit']}
               labelFormatter={(label: number) => `ROAS: ${label.toFixed(1)}x`}
             />
             <Line type="monotone" dataKey="profit" stroke="#8b5cf6" dot={false} />
@@ -822,14 +822,14 @@ const campaigns = useMemo(() => {
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis 
               dataKey="cost" 
-              tickFormatter={(value) => `$${Math.round(value/1000)}k`}
+              tickFormatter={(value) => `${Math.round(value/1000)}k`}
             />
             <YAxis 
               tickFormatter={(value) => `${value.toFixed(1)}x`}
             />
             <Tooltip 
               formatter={(value: number) => [`${value.toFixed(1)}x`, 'Marginal ROAS']}
-              labelFormatter={(label: number) => `Cost: $${Math.round(label).toLocaleString()}`}
+              labelFormatter={(label: number) => `Cost: ${Math.round(label).toLocaleString()}`}
             />
             <Line type="monotone" dataKey="marginalROAS" stroke="#ef4444" dot={false} />
           </LineChart>
@@ -1128,17 +1128,17 @@ const campaigns = useMemo(() => {
                         <span className={projection.profitChange < 0 ? 'text-red-500 font-bold' : 
                                           projection.profitChange > 0 ? 'text-green-500' : ''}>
                           {projection.profitChange === 0 ? '-' :
-                           `${projection.profitChange > 0 ? '+' : ''}$${Math.round(Math.abs(projection.profitChange)).toLocaleString()}`}
+                           `${projection.profitChange > 0 ? '+' : ''}${Math.round(Math.abs(projection.profitChange)).toLocaleString()}`}
                           </span>
                         </td>
                       <td className="px-4 py-2">
                         {projection.budgetGain > 0 && significantLostBudget > 0 ? 
-                          `$${Math.round(projection.budgetGain).toLocaleString()}` : 
+                          `${Math.round(projection.budgetGain).toLocaleString()}` : 
                           '-'}
                       </td>
                       <td className="px-4 py-2">
                         {projection.rankGain > 0 ? 
-                          `$${Math.round(projection.rankGain).toLocaleString()}` : 
+                          `${Math.round(projection.rankGain).toLocaleString()}` : 
                           '-'}
                       </td>
                       <td className="px-4 py-2">{projection.changeReason}</td>

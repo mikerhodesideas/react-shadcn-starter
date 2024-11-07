@@ -1,3 +1,4 @@
+// src/config/menu.ts
 import { Icons } from "@/components/icons"
 
 interface NavItem {
@@ -8,28 +9,29 @@ interface NavItem {
     external?: boolean
     icon?: keyof typeof Icons
     label?: string
+    hidden?: boolean
 }
 
 interface NavItemWithChildren extends NavItem {
     items?: NavItemWithChildren[]
 }
 
-export const mainNav = [
+export const mainNav: NavItem[] = [
     {
-        title: "Campaign Analysis",
+        title: "Settings",
         href: "/",
     },
     {
+        title: "Profit Analysis",
+        href: "/analysis",
+    },
+    {
         title: "Daily Trends",
-        href: "/daily",
+        href: "/trends",
     },
     {
         title: "Profit Curve",
         href: "/curve",
-    },
-    {
-        title: "Settings",
-        href: "/settings",
     },
     {
         title: "Debug",

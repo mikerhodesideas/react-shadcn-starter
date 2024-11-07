@@ -1,5 +1,7 @@
+// src/Router.tsx
+
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
-import AppLayout from "@/components/layouts/app-layout";
+import RootLayout from "@/components/layouts/root-layout";
 import Analysis from "@/pages/analysis";
 import Trends from "@/pages/trends";
 import Curve from "@/pages/curve";
@@ -10,7 +12,7 @@ import ErrorBoundary from "./ErrorBoundart";
 export const router = createBrowserRouter([
     {
         path: "/",
-        element: <AppLayout />,
+        element: <RootLayout />,
         errorElement: <ErrorBoundary />,
         children: [
             {

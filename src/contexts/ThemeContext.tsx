@@ -1,3 +1,5 @@
+// src/contexts/ThemeContext.tsx
+
 import { createContext, useEffect, useState } from "react"
 
 type ThemeProviderProps = {

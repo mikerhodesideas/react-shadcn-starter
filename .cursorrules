@@ -23,7 +23,7 @@ src/
 │   └── storage-utils.ts # Data persistence utilities
 ├── pages/             # Page components
 │   ├── index.tsx      # Settings page (data fetching)
-│   ├── analysis.tsx   # Campaign analysis
+│   ├── analysis.tsx   # Profit analysis
 │   ├── trends.tsx     # Time-based visualizations
 │   └── debug.tsx      # Data inspection view
 ├── services/          # Data services
@@ -229,7 +229,7 @@ The application fetches data from multiple Google Sheets tabs, each providing di
 2. **Thirty Day Data** (`thirtyDayData`)
    - Aggregated campaign performance over 30 days
    - Same fields as daily but without Date
-   - Example: Use for overall campaign analysis and optimization recommendations
+   - Example: Use for overall profit analysis and optimization recommendations
 
 3. **Hourly Data** (`hourlyTodayData`, `hourlyYesterdayData`)
    - Segmented by hour and campaign
@@ -265,7 +265,7 @@ The application fetches data from multiple Google Sheets tabs, each providing di
 6. **Performance Max** (`pmax`)
    - Performance Max campaign data
    - Fields: Date, Impressions, Cost, Conversions, ConvValue
-   - Example: Use for Performance Max campaign analysis
+   - Example: Use for Performance Max profit analysis
 
 ## Accessing Data
 ### Using the Campaign Data Context
