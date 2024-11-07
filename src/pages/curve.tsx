@@ -1,3 +1,5 @@
+// src/pages/curve.tsx
+
 'use client'
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -12,7 +14,8 @@ import { useCampaignData } from "@/contexts/campaign-data";
 type ChartType = 'profit-curve' | 'incremental-profit' | 'profit-vs-roas' | 'marginal-roas';
 
 export default function ProfitAnalysis() {
-  const { thirtyDayData, isLoading, error } = useCampaignData();
+  const { data, isLoading, error } = useCampaignData();
+  const thirtyDayData = data?.thirty_days || [];
 
   if (isLoading) return <div>Loading campaign data...</div>;
   if (error) return <div>Error loading data: {error}</div>;
@@ -183,326 +186,179 @@ export default function ProfitAnalysis() {
     }
   }, [profitData, cost]);
 
+// Common chart components and interfaces
+interface ChartConfig {
+  dataKey: string;
+  stroke: string;
+  yAxisFormatter: (value: number) => string;
+  tooltipFormatter: (value: number) => [string, string];
+  data: any[];
+}
 
+const renderCommonElements = (config: ChartConfig) => ({
+  cartesianGrid: (
+    <CartesianGrid
+      strokeDasharray="3 3"
+      vertical={false}
+      stroke="currentColor"
+      opacity={0.1}
+    />
+  ),
+  xAxis: (
+    <XAxis
+      dataKey="cost"
+      tickFormatter={(value) => `${Math.round(value / 1000)}k`}
+      stroke="currentColor"
+      domain={['dataMin', 'dataMax']}
+      padding={{ left: 20, right: 20 }}
+      style={{ fontSize: 9 }}
+    />
+  ),
+  yAxis: (
+    <YAxis
+      tickFormatter={config.yAxisFormatter}
+      stroke="currentColor"
+      width={50}
+      domain={['auto', 'auto']}
+      allowDataOverflow={false}
+      style={{ fontSize: 9 }}
+    />
+  ),
+  tooltip: (
+    <Tooltip
+      formatter={config.tooltipFormatter}
+      labelFormatter={(label: number) => `Cost: ${Math.round(label).toLocaleString()}`}
+      contentStyle={{
+        backgroundColor: 'hsl(var(--background))',
+        border: '1px solid hsl(var(--border))',
+        borderRadius: '8px'
+      }}
+    />
+  ),
+  profitArea: (
+    <ReferenceArea
+      x1={optimalZone.start}
+      x2={optimalZone.end}
+      fill="#22c55e"
+      fillOpacity={0.1}
+    />
+  ),
+  mainLine: (
+    <Line
+      type="monotone"
+      dataKey={config.dataKey}
+      stroke={config.stroke}
+      dot={false}
+      strokeWidth={2}
+      animationDuration={300}
+    />
+  )
+});
 
-  const renderActiveChart = (): React.ReactElement => {
-    const currentProfit = currentMetrics.profit;
-    const profitDisplay = (
-      <text
-        x="95%"
-        y="5%"
-        textAnchor="end"
-        className={`font-semibold ${currentProfit > 0 ? 'fill-green-500' : 'fill-red-500'}`}
-      >
-        ${Math.round(currentProfit).toLocaleString()}
-      </text>
-    );
+const renderProfitDisplay = (value: number) => (
+  <text
+    x="95%"
+    y="5%"
+    textAnchor="end"
+    className={`font-semibold ${value > 0 ? 'fill-green-500' : 'fill-red-500'}`}
+  >
+    ${Math.round(value).toLocaleString()}
+  </text>
+);
 
-    switch (activeChart) {
-      case 'profit-curve': 
-        const campaign = campaigns.find(c => c.Campaign === selectedCampaign);
-        if (!campaign) {
-          return <div className="flex items-center justify-center h-full">Select a campaign</div>;
-        }
+const findNearestCostValue = (data: any[], targetCost: number): number => {
+  if (!data?.length) return targetCost;
+  
+  return data.reduce((nearest, point) => {
+    const currentDiff = Math.abs(point.cost - targetCost);
+    const nearestDiff = Math.abs(nearest - targetCost);
+    return currentDiff < nearestDiff ? point.cost : nearest;
+  }, data[0].cost);
+};
 
-        return (
-          <LineChart
-            data={profitData}
-            margin={{ top: 20, right: 30, bottom: 5, left: 60 }}
-            className="text-foreground"
-          >
-            <CartesianGrid
-              strokeDasharray="3 3"
-              vertical={false}
-              stroke="currentColor"
-              opacity={0.1}
-            />
-            <XAxis
-              dataKey="cost"
-              tickFormatter={(value) => `${Math.round(value / 1000)}k`}
-              stroke="currentColor"
-            />
-            <YAxis
-              tickFormatter={(value) => `${Math.round(value / 1000)}k`}
-              stroke="currentColor"
-              width={50}
-              domain={['auto', 'auto']}
-              allowDataOverflow={false}
-            />
-            <Tooltip
-              formatter={(value: number) => [`${Math.round(value).toLocaleString()}`, 'Profit']}
-              labelFormatter={(label: number) => `Cost: ${Math.round(label).toLocaleString()}`}
-              contentStyle={{
-                backgroundColor: 'hsl(var(--background))',
-                border: '1px solid hsl(var(--border))',
-                borderRadius: '8px'
-              }}
-            />
+const renderReferenceLine = (data: any[]) => {
+  const nearestCost = findNearestCostValue(data, cost);
+  
+  return (
+    <ReferenceLine
+      x={nearestCost}
+      stroke="hsl(var(--foreground))"
+      strokeWidth={2}
+      strokeDasharray="3 3"
+      label={{
+        value: "Current Cost",
+        position: "top",
+        fill: "hsl(var(--foreground))",
+        fontSize: 12,
+      }}
+      isFront={true}
+    />
+  );
+};
 
-            <ReferenceArea
-              x1={optimalZone.start}
-              x2={optimalZone.end}
-              fill="#22c55e"
-              fillOpacity={0.1}
-            />
+const getChartConfig = (chartType: ChartType): ChartConfig => {
+  switch (chartType) {
+    case 'profit-curve':
+      return {
+        dataKey: 'profit',
+        stroke: '#8884d8',
+        data: profitData,
+        yAxisFormatter: (value) => `${Math.round(value / 1000)}k`,
+        tooltipFormatter: (value) => [`${Math.round(value).toLocaleString()}`, 'Profit']
+      };
+    case 'profit-vs-roas':
+      return {
+        dataKey: 'roas',
+        stroke: '#8b5cf6',
+        data: profitData,
+        yAxisFormatter: (value) => `${value.toFixed(1)}x`,
+        tooltipFormatter: (value) => [`${value.toFixed(2)}x`, 'ROAS']
+      };
+    case 'incremental-profit':
+      return {
+        dataKey: 'incrementalProfit',
+        stroke: '#22c55e',
+        data: incrementalData,
+        yAxisFormatter: (value) => `${Math.round(value / 1000)}k`,
+        tooltipFormatter: (value) => [`${Math.round(value).toLocaleString()}`, 'Incremental Profit']
+      };
+    case 'marginal-roas':
+      return {
+        dataKey: 'marginalROAS',
+        stroke: '#ef4444',
+        data: profitData,
+        yAxisFormatter: (value) => `${value.toFixed(1)}x`,
+        tooltipFormatter: (value) => [`${value.toFixed(2)}x`, 'Marginal ROAS']
+      };
+  }
+};
 
-            <ReferenceLine
-              x={cost}
-              stroke="#666666"
-              strokeWidth={2}
-              strokeDasharray="5 5"
-              ifOverflow="extendDomain" 
-            >
-              <Label
-                value="Current Cost"
-                position="top"
-                fill="#666666"
-                fontSize={12}
-                offset={10}
-              />
-            </ReferenceLine>
+const renderActiveChart = (): React.ReactElement => {
+  if (!selectedCampaign) {
+    return <div className="flex items-center justify-center h-full">Select a campaign</div>;
+  }
 
-            {profitDisplay}
-
-            <Line
-              type="monotone"
-              dataKey="profit"
-              stroke="#8884d8"
-              dot={false}
-              strokeWidth={2}
-              animationDuration={300}
-            />
-          </LineChart>
-        );
-      
-
-      case 'profit-vs-roas': 
-        return (
-          <LineChart
-            data={profitData}
-            margin={{ top: 20, right: 30, bottom: 5, left: 60 }}
-            className="text-foreground"
-          >
-            <CartesianGrid
-              strokeDasharray="3 3"
-              vertical={false}
-              stroke="currentColor"
-              opacity={0.1}
-            />
-            <XAxis
-              dataKey="cost"
-              tickFormatter={(value) => `${Math.round(value / 1000)}k`}
-              stroke="currentColor"
-            />
-            <YAxis
-              tickFormatter={(value) => `${value.toFixed(1)}x`}
-              stroke="currentColor"
-              width={50}
-              domain={['auto', 'auto']}
-              allowDataOverflow={false}
-            />
-            <Tooltip
-              formatter={(value: number) => [`${value.toFixed(2)}x`, 'ROAS']}
-              labelFormatter={(label: number) => `Cost: ${Math.round(label).toLocaleString()}`}
-              contentStyle={{
-                backgroundColor: 'hsl(var(--background))',
-                border: '1px solid hsl(var(--border))',
-                borderRadius: '8px'
-              }}
-            />
-
-            <ReferenceArea
-              x1={optimalZone.start}
-              x2={optimalZone.end}
-              fill="#22c55e"
-              fillOpacity={0.1}
-            />
-
-            <ReferenceLine
-              x={cost}
-              stroke="#666"
-              strokeWidth={3}
-              strokeDasharray="3 3"
-            >
-              <Label
-                value="Current Cost"
-                position="top"
-                fill="currentColor"
-                fontSize={12}
-              />
-            </ReferenceLine>
-
-            {profitDisplay}
-
-            <Line
-              type="monotone"
-              dataKey="roas"
-              stroke="#8b5cf6"
-              dot={false}
-              strokeWidth={2}
-              animationDuration={300}
-            />
-          </LineChart>
-        );
-      
-
-      case 'incremental-profit': 
-        const totalIncrementalProfit = incrementalData.reduce((sum, point) =>
-          sum + point.incrementalProfit, 0
-        );
-
-        return (
-          <LineChart
-            data={incrementalData}
-            margin={{ top: 20, right: 30, bottom: 5, left: 60 }}
-            className="text-foreground"
-          >
-            <CartesianGrid
-              strokeDasharray="3 3"
-              vertical={false}
-              stroke="currentColor"
-              opacity={0.1}
-            />
-            <XAxis
-              dataKey="cost"
-              tickFormatter={(value) => `${Math.round(value / 1000)}k`}
-              stroke="currentColor"
-            />
-            <YAxis
-              tickFormatter={(value) => `${Math.round(value / 1000)}k`}
-              stroke="currentColor"
-              width={50}
-              domain={['auto', 'auto']}
-              allowDataOverflow={false}
-            />
-            <Tooltip
-              formatter={(value: number) => [`${Math.round(value).toLocaleString()}`, 'Incremental Profit']}
-              labelFormatter={(label: number) => `Cost: ${Math.round(label).toLocaleString()}`}
-              contentStyle={{
-                backgroundColor: 'hsl(var(--background))',
-                border: '1px solid hsl(var(--border))',
-                borderRadius: '8px'
-              }}
-            />
-
-            <ReferenceArea
-              x1={optimalZone.start}
-              x2={optimalZone.end}
-              fill="#22c55e"
-              fillOpacity={0.1}
-            />
-
-            <ReferenceLine
-              x={cost}
-              stroke="#666"
-              strokeWidth={3}
-              strokeDasharray="3 3"
-            >
-              <Label
-                value="Current Cost"
-                position="top"
-                fill="currentColor"
-                fontSize={12}
-              />
-            </ReferenceLine>
-
-            <text
-              x="95%"
-              y="5%"
-              textAnchor="end"
-              className={`font-semibold ${totalIncrementalProfit > 0 ? 'fill-green-500' : 'fill-red-500'
-                }`}
-            >
-              ${Math.round(totalIncrementalProfit).toLocaleString()}
-            </text>
-
-            <Line
-              type="monotone"
-              dataKey="incrementalProfit"
-              stroke="#22c55e"
-              dot={false}
-              strokeWidth={2}
-              animationDuration={300}
-            />
-          </LineChart>
-        );
-      
-
-      case 'marginal-roas': 
-        return (
-          <LineChart
-            data={profitData}
-            margin={{ top: 20, right: 30, bottom: 5, left: 60 }}
-            className="text-foreground"
-          >
-            <CartesianGrid
-              strokeDasharray="3 3"
-              vertical={false}
-              stroke="currentColor"
-              opacity={0.1}
-            />
-            <XAxis
-              dataKey="cost"
-              tickFormatter={(value) => `${Math.round(value / 1000)}k`}
-              stroke="currentColor"
-            />
-            <YAxis
-              tickFormatter={(value) => `${value.toFixed(1)}x`}
-              stroke="currentColor"
-              width={50}
-              domain={['auto', 'auto']}
-              allowDataOverflow={false}
-            />
-            <Tooltip
-              formatter={(value: number) => [`${value.toFixed(2)}x`, 'Marginal ROAS']}
-              labelFormatter={(label: number) => `Cost: ${Math.round(label).toLocaleString()}`}
-              contentStyle={{
-                backgroundColor: 'hsl(var(--background))',
-                border: '1px solid hsl(var(--border))',
-                borderRadius: '8px'
-              }}
-            />
-
-            <ReferenceArea
-              x1={optimalZone.start}
-              x2={optimalZone.end}
-              fill="#22c55e"
-              fillOpacity={0.1}
-            />
-
-            <ReferenceLine
-              x={cost}
-              stroke="#666"
-              strokeWidth={3}
-              strokeDasharray="3 3"
-            >
-              <Label
-                value="Current Cost"
-                position="top"
-                fill="currentColor"
-                fontSize={12}
-              />
-            </ReferenceLine>
-
-            {profitDisplay}
-
-            <Line
-              type="monotone"
-              dataKey="marginalROAS"
-              stroke="#ef4444"
-              dot={false}
-              strokeWidth={2}
-              animationDuration={300}
-            />
-          </LineChart>
-        );
-      
-
-      default:
-        return <div>Select a chart type</div>;
-    }
-  };
-
+  const chartConfig = getChartConfig(activeChart);
+  const elements = renderCommonElements(chartConfig);
+  const currentProfit = currentMetrics.profit;
+  
+  return (
+    <LineChart
+      data={chartConfig.data}
+      margin={{ top: 20, right: 20, bottom: 5, left: 20 }}
+      className="text-foreground"
+    >
+      {elements.cartesianGrid}
+      {elements.xAxis}
+      {elements.yAxis}
+      {elements.tooltip}
+      {elements.profitArea}
+      {renderReferenceLine(chartConfig.data)} {/* Pass the data to renderReferenceLine */}
+      {renderProfitDisplay(currentProfit)}
+      {elements.mainLine}
+    </LineChart>
+  );
+};
 
   return (
     <div className="space-y-6">
@@ -520,9 +376,18 @@ export default function ProfitAnalysis() {
                 </SelectTrigger>
                 <SelectContent>
                   {campaigns.map((campaign) => (
-                    <SelectItem key={campaign.Campaign} value={campaign.Campaign}>
-                      {campaign.Campaign}
-                    </SelectItem>
+                     <SelectItem 
+                     key={campaign.Campaign} 
+                     value={campaign.Campaign}
+                     className="flex items-center"
+                   >
+                     <span className="text-sm font-medium min-w-[100px]">
+                       ${Math.round(campaign.Cost).toLocaleString()}
+                     </span>
+                     <span className="truncate ml-2">
+                       {campaign.Campaign}
+                     </span>
+                   </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -539,8 +404,8 @@ export default function ProfitAnalysis() {
                 min={1}
                 max={Math.max(...campaigns.map(c => c.Cost)) * 2}
                 step={100}
-                value={[Math.max(1, cost)]}
-                onValueChange={(value) => setCost(Math.max(1, value[0]))}
+                value={[Math.max(0, cost)]}
+                onValueChange={(value) => setCost(Math.max(0, value[0]))}
               />
               <p className="text-center mt-2">${Math.round(cost).toLocaleString()}</p>
             </CardContent>
@@ -586,10 +451,10 @@ export default function ProfitAnalysis() {
           <Card className="h-full">
             <CardHeader>
               <CardTitle>
-                {activeChart === 'profit-curve' && 'Profit Curve'}
-                {activeChart === 'incremental-profit' && 'Incremental Profit'}
-                {activeChart === 'profit-vs-roas' && 'Profit vs ROAS'}
-                {activeChart === 'marginal-roas' && 'Marginal ROAS'}
+                {activeChart === 'profit-curve' && 'Profit Curve (optimal profit zone shown in light green)'}
+                {activeChart === 'incremental-profit' && 'Incremental Profit (optimal profit zone shown in light green)'}
+                {activeChart === 'profit-vs-roas' && 'Profit vs ROAS (optimal profit zone shown in light green)'}
+                {activeChart === 'marginal-roas' && 'Marginal ROAS (optimal profit zone shown in light green)'}
               </CardTitle>
             </CardHeader>
             <CardContent>

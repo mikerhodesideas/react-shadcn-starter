@@ -4,14 +4,15 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { ThemeProvider } from "@/components/theme-provider"
 import { CampaignDataProvider } from "@/contexts/campaign-data"
-import Router from './Router'
+import { router } from './Router'
 import './index.css'
+import { RouterProvider } from 'react-router-dom'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
       <CampaignDataProvider>
-        <Router />
+        <RouterProvider router={router} />
       </CampaignDataProvider>
     </ThemeProvider>
   </React.StrictMode>

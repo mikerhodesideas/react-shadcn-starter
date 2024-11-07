@@ -16,6 +16,14 @@ import { ChevronDown, ChevronUp } from "lucide-react" // For the toggle icon
 import { useCampaignData } from "@/contexts/campaign-data"
 import { STORAGE_KEYS } from '@/lib/constants'
 
+function debugStorage() {
+  const data = localStorage.getItem('campaign_data');
+  console.log('Raw localStorage data:', data);
+  if (data) {
+    console.log('Parsed localStorage data:', JSON.parse(data));
+  }
+}
+
 interface CampaignData {
   Campaign: string;
   Cost: number;
@@ -170,9 +178,12 @@ const SortableHeader = ({
   </th>
 );
 
+
+
 export default function Analysis() {
-  const { thirtyDayData, isLoading, error } = useCampaignData()
-  console.log('Campaign data context:', { thirtyDayData, isLoading, error })
+  debugStorage(); 
+  const { data, isLoading, error } = useCampaignData()
+  const thirtyDayData = Array.isArray(data?.thirty_days) ? data.thirty_days : []
 
   // Early returns for data issues
   if (isLoading) {

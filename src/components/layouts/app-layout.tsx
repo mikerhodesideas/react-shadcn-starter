@@ -1,5 +1,5 @@
 import { Outlet } from "react-router-dom"
-import { MainNav } from "@/components/nav"
+import { MainNav } from "@/components/old?/nav"
 
 export default function AppLayout() {
   return (

@@ -18,11 +18,19 @@ interface NavItemWithChildren extends NavItem {
 
 export const mainNav: NavItem[] = [
     {
-        title: "Settings",
+        title: "Home",
         href: "/",
     },
     {
-        title: "Profit Analysis",
+        title: "Setup",
+        href: "/setup",
+    },
+    {
+        title: "Settings",
+        href: "/settings",
+    },
+    {
+        title: "Analysis",
         href: "/analysis",
     },
     {
