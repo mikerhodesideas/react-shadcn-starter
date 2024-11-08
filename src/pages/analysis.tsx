@@ -16,14 +16,6 @@ import { ChevronDown, ChevronUp } from "lucide-react" // For the toggle icon
 import { useCampaignData } from "@/contexts/campaign-data"
 import { STORAGE_KEYS } from '@/lib/constants'
 
-function debugStorage() {
-  const data = localStorage.getItem('campaign_data');
-  console.log('Raw localStorage data:', data);
-  if (data) {
-    console.log('Parsed localStorage data:', JSON.parse(data));
-  }
-}
-
 interface CampaignData {
   Campaign: string;
   Cost: number;
@@ -115,38 +107,6 @@ interface CampaignProjection {
   rankGain: number;
 }
 
-// Update the BoxPlot component
-const BoxPlot = ({ currentCost, minCost, maxCost }: { 
-  currentCost: number;
-  minCost: number;
-  maxCost: number;
-}) => {
-  // Always use 0-100 range for positioning
-  const currentPos = ((currentCost - minCost) / (maxCost - minCost)) * 100;
-
-  return (
-    <div className="relative w-[120px] h-4 bg-muted rounded overflow-hidden">
-      {/* Optimal range - always show in middle 60% of plot */}
-      <div 
-        className="absolute h-full bg-green-500/20 dark:bg-green-500/40"
-        style={{
-          left: '20%',
-          width: '60%'
-        }}
-      />
-      {/* Current position */}
-      <div 
-        className="absolute h-full w-0.5 bg-foreground"
-        style={{
-          left: `${currentPos}%`,
-          transform: 'translateX(-50%)'
-        }}
-      />
-    </div>
-  );
-};
-
-// Add these new types and states at the top of the component
 type SortField = 'cost' | 'revenue' | 'profit' | 'roas' | 'lostBudget' | 'currentCost' | 'currentProfit' | 'projectedCost' | 'projectedProfit' | 'percentChange' | 'profitChange';
 type SortDirection = 'asc' | 'desc';
 
@@ -178,110 +138,137 @@ const SortableHeader = ({
   </th>
 );
 
-
-
 export default function Analysis() {
-  debugStorage(); 
+
   const { data, isLoading, error } = useCampaignData()
-  const thirtyDayData = Array.isArray(data?.thirty_days) ? data.thirty_days : []
 
-  // Early returns for data issues
-  if (isLoading) {
-    return <div>Loading campaign data...</div>
-  }
+  // Get all the different data arrays with fallbacks
+  const thirtyDayData = Array.isArray(data?.thirty_days) ? data.thirty_days : [];
+  const previousThirtyDays = Array.isArray(data?.previous_thirty_days) ? data.previous_thirty_days : [];
+  const sevenDayData = Array.isArray(data?.seven_days) ? data.seven_days : [];
+  const previousSevenDays = Array.isArray(data?.previous_seven_days) ? data.previous_seven_days : [];
+  const hourlyToday = Array.isArray(data?.hourly_today) ? data.hourly_today : [];
+  const hourlyYesterday = Array.isArray(data?.hourly_yesterday) ? data.hourly_yesterday : [];
+  const settings = Array.isArray(data?.settings) ? data.settings : [];
+  const products = Array.isArray(data?.products) ? data.products : [];
+  const matchTypes = Array.isArray(data?.match_types) ? data.match_types : [];
+  const searchTerms = Array.isArray(data?.search_terms) ? data.search_terms : [];
+  const channels = Array.isArray(data?.channels) ? data.channels : [];
+  const pmax = Array.isArray(data?.pmax) ? data.pmax : [];
 
-  if (error) {
-    return <div>Error loading data: {error}</div>
-  }
-
-  if (!thirtyDayData?.length) {
-    return <div>No campaign data available. Please load data in Settings.</div>
-  }
-
+  // Core state declarations
+  const [selectedPeriod, setSelectedPeriod] = useState<'30d' | '7d'>('30d')
+  const [cogsPercentage, setCogsPercentage] = useState(50)
   const [selectedCampaign, setSelectedCampaign] = useState<string>('')
   const [cost, setCost] = useState(0)
   const [convValue, setConvValue] = useState(0)
-  const [cogsPercentage, setCogsPercentage] = useState(50)
-  const [activeChart, setActiveChart] = useState<ChartType>('profit-curve')
   const [includeFilter, setIncludeFilter] = useState('')
-const [excludeFilter, setExcludeFilter] = useState('')
-const [rowLimit, setRowLimit] = useState(() => {
-  const saved = localStorage.getItem(STORAGE_KEYS.ROW_LIMIT)
-  return saved ? parseInt(saved, 10) : 10
-})
-const [sortState, setSortState] = useState<SortState>({
-  field: 'cost',
-  direction: 'desc'
-})
-const [projectionsSortState, setProjectionsSortState] = useState<SortState>({
-  field: 'currentCost',
-  direction: 'desc'
-})
-const [optimalZone, setOptimalZone] = useState<OptimalZone>({
-  start: 0,
-  end: 0,
-  current: 0,
-  maxProfit: 0
-})
-
-// Add effect to save rowLimit changes
-useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.ROW_LIMIT, rowLimit.toString())
-  }, [rowLimit])
-
-  // Debug logging (optional)
-  useEffect(() => {
-    console.log("Loading state:", isLoading)
-    console.log("Data:", thirtyDayData)
-    console.log("Error:", error)
-  }, [isLoading, thirtyDayData, error])
-
-// Get unique campaigns and their metrics
-const campaigns = useMemo(() => {
-  if (!thirtyDayData?.length) return []
-  
-  const campaignMap = new Map()
-  thirtyDayData.forEach(row => {
-    if (!row.Campaign) return  // Skip rows without campaign name
-    
-    if (!campaignMap.has(row.Campaign)) {
-      campaignMap.set(row.Campaign, {
-        Campaign: row.Campaign,
-        Cost: row.Cost || 0,
-        ConvValue: row.ConvValue || 0,
-        Clicks: row.Clicks || 0,
-        Conversions: row.Conversions || 0,
-        ImprShare: row.ImprShare || 0,
-        LostToBudget: row.LostToBudget || 0,
-        LostToRank: row.LostToRank || 0,
-        Impressions: row.Impressions || 0
-      })
-    } else {
-      // For already existing campaigns, update the values
-      const campaign = campaignMap.get(row.Campaign)
-      campaign.Cost += row.Cost || 0
-      campaign.ConvValue += row.ConvValue || 0
-      campaign.Clicks += row.Clicks || 0
-      campaign.Conversions += row.Conversions || 0
-      campaign.Impressions += row.Impressions || 0
-      // Take the most recent impression share data
-      campaign.ImprShare = row.ImprShare || campaign.ImprShare
-      campaign.LostToBudget = row.LostToBudget || campaign.LostToBudget
-      campaign.LostToRank = row.LostToRank || campaign.LostToRank
-    }
+  const [excludeFilter, setExcludeFilter] = useState('')
+  const [rowLimit, setRowLimit] = useState(10)  // Default to 10 rows
+  const [sortState, setSortState] = useState<SortState>({
+    field: 'cost',
+    direction: 'desc'
   })
+  const [projectionsSortState, setProjectionsSortState] = useState<SortState>({
+    field: 'currentCost',
+    direction: 'desc'
+  })
+  const [optimalZone, setOptimalZone] = useState<OptimalZone | null>(null)
 
-  return Array.from(campaignMap.values())
-}, [thirtyDayData])
+  
+  // Early returns for data loading scenarios
+  if (!data && isLoading) return <div>Loading campaign data...</div>
+  if (error) return <div>Error loading data: {error}</div>
+  if (!thirtyDayData?.length && !sevenDayData?.length) return <div>No campaign data available. Please load data in Settings.</div>
+
+  // Update campaigns useMemo to use selected period
+  const campaigns = useMemo(() => {
+    if (!data) return []
+    
+    const campaignMap = new Map()
+    
+    console.log('Raw data being processed:', {
+      currentData: selectedPeriod === '30d' ? thirtyDayData : sevenDayData,
+      previousData: selectedPeriod === '30d' ? previousThirtyDays : previousSevenDays
+    });
+    
+    // Use the selected period's data
+    const currentData = selectedPeriod === '30d' ? thirtyDayData : sevenDayData
+    const previousData = selectedPeriod === '30d' ? previousThirtyDays : previousSevenDays
+    
+    currentData.forEach(row => {
+      if (!row?.Campaign) return
+      
+      if (!campaignMap.has(row.Campaign)) {
+        campaignMap.set(row.Campaign, {
+          Campaign: row.Campaign,
+          Cost: row.Cost || 0,
+          ConvValue: row.ConvValue || 0,
+          Clicks: row.Clicks || 0,
+          Conversions: row.Conversions || 0,
+          ImprShare: row.ImprShare || 0,
+          LostToBudget: row.LostToBudget || 0,
+          LostToRank: row.LostToRank || 0,
+          Impressions: row.Impressions || 0,
+          PreviousCost: 0,
+          PreviousConvValue: 0,
+          PreviousConversions: 0,
+          CostChange: 0,
+          ConvValueChange: 0,
+          ConversionsChange: 0
+        })
+      } else {
+        const campaign = campaignMap.get(row.Campaign)
+        campaign.Cost += row.Cost || 0
+        campaign.ConvValue += row.ConvValue || 0
+        campaign.Clicks += row.Clicks || 0
+        campaign.Conversions += row.Conversions || 0
+        campaign.Impressions += row.Impressions || 0
+        campaign.ImprShare = row.ImprShare || campaign.ImprShare
+        campaign.LostToBudget = row.LostToBudget || campaign.LostToBudget
+        campaign.LostToRank = row.LostToRank || campaign.LostToRank
+      }
+    })
+
+    // Add previous period data
+    previousData.forEach(row => {
+      if (!row?.Campaign || !campaignMap.has(row.Campaign)) return
+      
+      const campaign = campaignMap.get(row.Campaign)
+      campaign.PreviousCost += row.Cost || 0
+      campaign.PreviousConvValue += row.ConvValue || 0
+      campaign.PreviousConversions += row.Conversions || 0
+    })
+
+    // Calculate period-over-period changes
+    campaignMap.forEach(campaign => {
+      campaign.CostChange = campaign.PreviousCost ? 
+        ((campaign.Cost - campaign.PreviousCost) / campaign.PreviousCost) * 100 : 0
+      campaign.ConvValueChange = campaign.PreviousConvValue ? 
+        ((campaign.ConvValue - campaign.PreviousConvValue) / campaign.PreviousConvValue) * 100 : 0
+      campaign.ConversionsChange = campaign.PreviousConversions ? 
+        ((campaign.Conversions - campaign.PreviousConversions) / campaign.PreviousConversions) * 100 : 0
+    })
+
+    console.log('Processed campaign data:', Array.from(campaignMap.values()));
+  
+    return Array.from(campaignMap.values())
+  }, [data, selectedPeriod, thirtyDayData, previousThirtyDays, sevenDayData, previousSevenDays])
 
   // Set initial campaign when data loads
   useEffect(() => {
     if (campaigns.length > 0 && !selectedCampaign) {
-      setSelectedCampaign(campaigns[0].Campaign)
-      setCost(campaigns[0].Cost)
-      setConvValue(campaigns[0].ConvValue)
+      console.log('Initial campaign data:', campaigns[0]);  
+      setSelectedCampaign(campaigns[0].Campaign);
+      setCost(campaigns[0].Cost);        // Check these values
+      setConvValue(campaigns[0].ConvValue); // Check these values
+      console.log('Setting initial values:', {  
+        campaign: campaigns[0].Campaign,
+        cost: campaigns[0].Cost,
+        convValue: campaigns[0].ConvValue
+      });
     }
-  }, [campaigns, selectedCampaign])
+  }, [campaigns, selectedCampaign]);
 
   // Debug logging
   useEffect(() => {
@@ -666,187 +653,6 @@ const campaigns = useMemo(() => {
     });
   }, [filteredCampaignSummaries, campaigns, cogsPercentage, increasePercentage, decreasePercentage]);
 
-  const renderActiveChart = () => {
-    switch (activeChart) {
-      case 'profit-curve':
-        const campaign = campaigns.find(c => c.Campaign === selectedCampaign);
-        if (!campaign) return null;
-
-        const currentIS = campaign.ImprShare;
-        const lostToBudget = campaign.LostToBudget;
-        const spendForBudgetIS = campaign.Cost * (1 + lostToBudget / currentIS);
-        const maxSpend = campaign.Cost * (0.9 / currentIS);
-
-        return (
-          <LineChart 
-            data={profitData} 
-            margin={{ top: 30, right: 30, bottom: 5, left: 20 }}
-            className="text-foreground"
-          >
-            <CartesianGrid strokeDasharray="3 3" stroke="currentColor" opacity={0.1} />
-            <XAxis 
-              dataKey="cost" 
-              tickFormatter={(value) => `${Math.round(value/1000)}k`}
-              stroke="currentColor"
-            />
-            <YAxis 
-              tickFormatter={(value) => `${Math.round(value/1000)}k`}
-              stroke="currentColor"
-            />
-            <Tooltip 
-              formatter={(value: number) => [`${Math.round(value).toLocaleString()}`, 'Profit']}
-              labelFormatter={(label: number) => `Cost: ${Math.round(label).toLocaleString()}`}
-            />
-            
-            {/* Add optimal zone shading */}
-            <ReferenceArea
-              x1={optimalZone.start}
-              x2={optimalZone.end}
-              fill="#22c55e"
-              fillOpacity={0.1}
-            />
-            
-            {/* Add boundary lines */}
-            <ReferenceLine
-              x={optimalZone.start}
-              stroke="#22c55e"
-              strokeDasharray="3 3"
-            />
-            <ReferenceLine
-              x={optimalZone.end}
-              stroke="#22c55e"
-              strokeDasharray="3 3"
-            />
-            
-            {/* Current position line - full height black line */}
-            <ReferenceLine
-              x={cost}
-              stroke="#000000"
-              strokeWidth={2}
-              isFront={true}
-            />
-
-            {/* Budget-limited IS point */}
-            <ReferenceLine
-              x={spendForBudgetIS}
-              stroke="#f59e0b"
-              strokeDasharray="3 3"
-              label={{
-                value: `Budget Limited (${(currentIS * 100 + lostToBudget * 100).toFixed(1)}% IS)`,
-                position: 'top',
-                fill: '#f59e0b'
-              }}
-            />
-
-            {/* Max possible IS (90%) point */}
-            <ReferenceLine
-              x={maxSpend}
-              stroke="#ef4444"
-              strokeDasharray="3 3"
-              label={{
-                value: '90% IS',
-                position: 'top',
-                fill: '#ef4444'
-              }}
-            />
-
-            <Line type="monotone" dataKey="profit" stroke="#8884d8" dot={false} />
-
-            {/* Add current profit label */}
-            <text
-              x="95%"
-              y="20"
-              textAnchor="end"
-              className="fill-current text-foreground"
-            >
-              Profit: ${Math.round(currentMetrics.profit).toLocaleString()}
-            </text>
-          </LineChart>
-        );
-
-      case 'incremental-profit':
-        return (
-          <LineChart data={incrementalData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis 
-              dataKey="cost" 
-              tickFormatter={(value) => `${(value/1000).toFixed(1)}k`}
-            />
-            <YAxis 
-              tickFormatter={(value) => `${(value/1000).toFixed(1)}k`}
-            />
-            <Tooltip 
-              formatter={(value: number) => [`${value.toLocaleString()}`, 'Incremental Profit']}
-              labelFormatter={(label: number) => `Cost: ${label.toLocaleString()}`}
-            />
-            
-            {/* Add zero line */}
-            <ReferenceLine
-              y={0}
-              stroke="#ef4444"
-              strokeDasharray="3 3"
-              label={{ 
-                value: 'Break Even', 
-                position: 'right',
-                fill: '#ef4444'
-              }}
-            />
-
-            {/* Add current position line */}
-            <ReferenceLine
-              x={optimalZone.current}
-              stroke="#ef4444"
-              label={{ 
-                value: 'Current', 
-                angle: -90, 
-                position: 'top',
-                fill: '#ef4444'
-              }}
-            />
-
-            <Line type="monotone" dataKey="incrementalProfit" stroke="#22c55e" dot={false} />
-          </LineChart>
-        );
-
-      case 'profit-vs-roas':
-        return (
-          <LineChart data={profitData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis 
-              dataKey="roas" 
-              tickFormatter={(value) => `${value.toFixed(1)}x`}
-            />
-            <YAxis 
-              tickFormatter={(value) => `${Math.round(value/1000)}k`}
-            />
-            <Tooltip 
-              formatter={(value: number) => [`${Math.round(value).toLocaleString()}`, 'Profit']}
-              labelFormatter={(label: number) => `ROAS: ${label.toFixed(1)}x`}
-            />
-            <Line type="monotone" dataKey="profit" stroke="#8b5cf6" dot={false} />
-          </LineChart>
-        );
-
-      case 'marginal-roas':
-        return (
-          <LineChart data={profitData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis 
-              dataKey="cost" 
-              tickFormatter={(value) => `${Math.round(value/1000)}k`}
-            />
-            <YAxis 
-              tickFormatter={(value) => `${value.toFixed(1)}x`}
-            />
-            <Tooltip 
-              formatter={(value: number) => [`${value.toFixed(1)}x`, 'Marginal ROAS']}
-              labelFormatter={(label: number) => `Cost: ${Math.round(label).toLocaleString()}`}
-            />
-            <Line type="monotone" dataKey="marginalROAS" stroke="#ef4444" dot={false} />
-          </LineChart>
-        );
-    }
-  };
 
   // Add sorting function
   const sortData = (data: any[], field: SortField, direction: SortDirection) => {
@@ -869,7 +675,21 @@ const campaigns = useMemo(() => {
       {/* Overall Performance Summary */}
       <Card>
         <CardHeader>
-          <CardTitle>Overall Performance</CardTitle>
+          <div className="flex justify-between items-center">
+            <CardTitle>Overall Performance</CardTitle>
+            <Select 
+              value={selectedPeriod} 
+              onValueChange={(value: '30d' | '7d') => setSelectedPeriod(value)}
+            >
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Select period" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="30d">Last 30 Days</SelectItem>
+                <SelectItem value="7d">Last 7 Days</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-8 gap-3">
@@ -878,11 +698,17 @@ const campaigns = useMemo(() => {
               <p className="text-xl font-bold">
                 ${Math.round(campaigns.reduce((sum, c) => sum + c.Cost, 0)).toLocaleString()}
               </p>
+              <p className="text-xs text-muted-foreground">
+                vs previous: {Math.round(campaigns.reduce((sum, c) => sum + c.CostChange, 0) / campaigns.length)}%
+              </p>
             </div>
             <div className="col-span-1">
               <p className="text-sm font-medium">Total Revenue</p>
               <p className="text-xl font-bold">
                 ${Math.round(campaigns.reduce((sum, c) => sum + c.ConvValue, 0)).toLocaleString()}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                vs previous: {Math.round(campaigns.reduce((sum, c) => sum + c.ConvValueChange, 0) / campaigns.length)}%
               </p>
             </div>
             <div className="col-span-1">
@@ -890,17 +716,26 @@ const campaigns = useMemo(() => {
               <p className="text-xl font-bold">
                 ${Math.round(campaigns.reduce((sum, c) => sum + (c.ConvValue * (1 - cogsPercentage/100) - c.Cost), 0)).toLocaleString()}
               </p>
+              <p className="text-xs text-muted-foreground">
+                vs previous: {Math.round(campaigns.reduce((sum, c) => sum + c.profitChange, 0) / campaigns.length)}%
+              </p>
             </div>
             <div className="col-span-1">
               <p className="text-sm font-medium">Avg CPA</p>
               <p className="text-xl font-bold">
                 ${(campaigns.reduce((sum, c) => sum + c.Cost, 0) / campaigns.reduce((sum, c) => sum + c.Conversions, 0)).toFixed(2)}
               </p>
+              <p className="text-xs text-muted-foreground">
+                vs previous: {Math.round(campaigns.reduce((sum, c) => sum + c.CostChange, 0) / campaigns.length)}%
+              </p>
             </div>
             <div className="col-span-1">
               <p className="text-sm font-medium">Conv Rate</p>
               <p className="text-xl font-bold">
                 {(campaigns.reduce((sum, c) => sum + c.Conversions, 0) / campaigns.reduce((sum, c) => sum + c.Clicks, 0) * 100).toFixed(1)}%
+              </p>
+              <p className="text-xs text-muted-foreground">
+                vs previous: {Math.round(campaigns.reduce((sum, c) => sum + c.ConvValueChange, 0) / campaigns.length)}%
               </p>
             </div>
             <div className="col-span-1">
@@ -910,7 +745,7 @@ const campaigns = useMemo(() => {
                   campaigns.reduce((sum, c) => sum + c.Cost, 0)).toFixed(1)}x
               </p>
               <p className="text-xs text-muted-foreground">
-                Breakeven: {(1 / (1 - cogsPercentage / 100)).toFixed(1)}x
+                vs previous: {Math.round(campaigns.reduce((sum, c) => sum + c.roasChange, 0) / campaigns.length)}%
               </p>
             </div>
             <div className="col-span-2">
@@ -926,6 +761,9 @@ const campaigns = useMemo(() => {
                 />
                 <span className="text-xl font-bold w-16 text-right">{cogsPercentage}%</span>
               </div>
+              <p className="text-xs text-muted-foreground">
+                vs previous: {Math.round(campaigns.reduce((sum, c) => sum + c.cogsChange, 0) / campaigns.length)}%
+              </p>
             </div>
           </div>
         </CardContent>
