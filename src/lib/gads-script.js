@@ -1,5 +1,4 @@
 // gads-script.js in /lib/  -  full script without SHEET_URL (added in app)
-const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1XmQYHWYbQbtn6mnrGYB71dsixbp66Eo3n5o7fka_s10/edit?gid=449446387#gid=449446387'
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // 1 second
 
