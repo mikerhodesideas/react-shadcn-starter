@@ -9,6 +9,8 @@ import Curve from "@/pages/curve";
 import Settings from "@/pages/settings";
 import Setup from "@/pages/setup";
 import Debug from "@/pages/debug";
+import { ErrorBoundary } from '@/components/error-boundary'
+
 
 export const router = createBrowserRouter([
     {
@@ -34,7 +36,11 @@ export const router = createBrowserRouter([
             },
             {
                 path: "trends",
-                element: <Trends />,
+                element: (
+                    <ErrorBoundary>
+                        <Trends />
+                    </ErrorBoundary>
+                ),
             },
             {
                 path: "curve",

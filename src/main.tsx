@@ -10,7 +10,7 @@ import { RouterProvider } from 'react-router-dom'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
+    <ThemeProvider defaultTheme="dark" storageKey="app-theme">
       <CampaignDataProvider>
         <RouterProvider router={router} />
       </CampaignDataProvider>

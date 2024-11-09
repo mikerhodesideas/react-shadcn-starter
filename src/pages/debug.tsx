@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useCampaignData } from "@/contexts/campaign-data"
 import { STORAGE_KEYS } from '@/lib/constants'
 
+// Component for Table Display
 function DataTable({ data, title }: { data: any[], title: string }) {
   if (!data?.length) return null
 
@@ -90,7 +91,7 @@ export default function Debug() {
   ]
 
   return (
-    <div className="container mx-auto py-6">
+    <div className="container mx-auto py-6 space-y-6">
       <div className="mb-8">
         <h1 className="text-2xl font-bold">Data Debug View</h1>
         <p className="text-sm text-muted-foreground mt-2">
@@ -98,9 +99,43 @@ export default function Debug() {
         </p>
       </div>
 
-      {allDataSets.map(({ data, title }) => (
-        <DataTable key={title} data={data} title={title} />
-      ))}
+      {/* Displaying Colors and Typography */}
+      <section className="space-y-4">
+        <h2 className="text-lg font-semibold text-primary">Primary Color Text</h2>
+        <p className="text-muted-foreground">This is a muted foreground text example.</p>
+        <p className="text-secondary">This is a secondary text color.</p>
+        <div className="bg-primary text-white p-4 rounded">Primary Background</div>
+        <div className="bg-secondary text-white p-4 rounded">Secondary Background</div>
+        <div className="bg-muted p-4 rounded text-muted-foreground">Muted Background</div>
+      </section>
+
+      {/* Basic Components Showcase */}
+      <section className="space-y-6 mt-6">
+        <Card className="p-4 bg-background">
+          <CardHeader>
+            <CardTitle>Sample Card Component</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p>This card component showcases default padding and background styling.</p>
+          </CardContent>
+        </Card>
+
+        <Card className="p-4 bg-accent text-accent-foreground">
+          <CardHeader>
+            <CardTitle>Accent Card</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p>This card has accent background and foreground colors applied.</p>
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* Data Tables */}
+      <div className="space-y-8 mt-8">
+        {allDataSets.map(({ data, title }) => (
+          <DataTable key={title} data={data} title={title} />
+        ))}
+      </div>
     </div>
   )
 }

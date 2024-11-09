@@ -1,5 +1,3 @@
-// src/components/ui/date-range-picker.tsx
-import * as React from "react"
 import { format } from "date-fns"
 import { Calendar as CalendarIcon } from "lucide-react"
 import { DateRange } from "react-day-picker"
@@ -13,22 +11,16 @@ import {
 } from "@/components/ui/popover"
 
 interface DateRangePickerProps {
+  date: DateRange | undefined
+  onChange: (date: DateRange | undefined) => void
   className?: string
-  value?: DateRange
-  onChange?: (date: DateRange | undefined) => void
 }
 
 export function DateRangePicker({
+  date,
+  onChange,
   className,
-  value,
-  onChange
 }: DateRangePickerProps) {
-  const [date, setDate] = React.useState<DateRange | undefined>(value)
-
-  React.useEffect(() => {
-    setDate(value)
-  }, [value])
-
   return (
     <div className={cn("grid gap-2", className)}>
       <Popover>
@@ -37,7 +29,7 @@ export function DateRangePicker({
             id="date"
             variant={"outline"}
             className={cn(
-              "w-full justify-start text-left font-normal",
+              "w-[300px] justify-start text-left font-normal",
               !date && "text-muted-foreground"
             )}
           >
@@ -56,23 +48,20 @@ export function DateRangePicker({
             )}
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-[560px] md:w-full p-0 shadow-lg" align="center">
-          <div className="p-3 space-y-2">
+        <PopoverContent className="w-auto p-0" align="start">
+          <div className="border rounded-md bg-popover p-2">
             <Calendar
+              initialFocus
               mode="range"
               defaultMonth={date?.from}
               selected={date}
-              onSelect={(newDate) => {
-                setDate(newDate)
-                onChange?.(newDate)
-              }}
+              onSelect={onChange}
               numberOfMonths={2}
-              showOutsideDays={false}
-              className="rounded-md border"
+              className="rounded-md"
             />
           </div>
         </PopoverContent>
       </Popover>
     </div>
   )
-}
+} 

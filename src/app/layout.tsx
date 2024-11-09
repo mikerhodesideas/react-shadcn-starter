@@ -1,3 +1,4 @@
+// src/app/layout.tsx
 import { ThemeProvider } from "@/components/theme-provider"
 import { ThemeSwitcher } from "@/components/theme-toggle"
 import { CampaignDataProvider } from '@/contexts/campaign-data'
